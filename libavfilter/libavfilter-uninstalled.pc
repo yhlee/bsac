@@ -1,0 +1,12 @@
+prefix=
+exec_prefix=
+libdir=${pcfiledir}
+includedir=/home/beckgom/Downloads/libav-HEAD-76cd98b
+
+Name: libavfilter
+Description: Libav video filtering library
+Version: 2.3.1
+Requires: 
+Conflicts:
+Libs: ${libdir}/libavfilter.a -ldl -lasound -lm -pthread -lz 
+Cflags: -I${includedir}

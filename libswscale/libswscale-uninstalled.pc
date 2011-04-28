@@ -1,0 +1,12 @@
+prefix=
+exec_prefix=
+libdir=${pcfiledir}
+includedir=/home/beckgom/Downloads/libav-HEAD-76cd98b
+
+Name: libswscale
+Description: Libav image rescaling library
+Version: 1.0.0
+Requires: libavutil = 51.1.0
+Conflicts:
+Libs: ${libdir}/libswscale.a -lm
+Cflags: -I${includedir}

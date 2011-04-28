@@ -1,0 +1,14 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: libavformat
+Description: Libav container format library
+Version: 53.0.3
+Requires: libavcodec = 53.1.1
+Requires.private: 
+Conflicts:
+Libs: -L${libdir} -lavformat -ldl -lasound -lm -pthread -lz
+Libs.private: 
+Cflags: -I${includedir}

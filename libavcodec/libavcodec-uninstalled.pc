@@ -1,0 +1,12 @@
+prefix=
+exec_prefix=
+libdir=${pcfiledir}
+includedir=/home/beckgom/Downloads/libav-HEAD-76cd98b
+
+Name: libavcodec
+Description: Libav codec library
+Version: 53.1.1
+Requires: libavutil = 51.1.0
+Conflicts:
+Libs: ${libdir}/libavcodec.a -ldl -lasound -lm -pthread -lz  -lm
+Cflags: -I${includedir}

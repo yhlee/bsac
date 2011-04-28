@@ -1,0 +1,12 @@
+prefix=
+exec_prefix=
+libdir=${pcfiledir}
+includedir=/home/beckgom/Downloads/libav-HEAD-76cd98b
+
+Name: libavdevice
+Description: Libav device handling library
+Version: 53.0.0
+Requires: libavformat = 53.0.3
+Conflicts:
+Libs: ${libdir}/libavdevice.a -ldl -lasound -lm -pthread -lz 
+Cflags: -I${includedir}
