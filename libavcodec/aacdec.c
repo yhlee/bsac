@@ -93,6 +93,7 @@
 #include "aac.h"
 #include "aactab.h"
 #include "aacdectab.h"
+#include "bsactab.h"
 #include "cbrt_tablegen.h"
 #include "sbr.h"
 #include "aacsbr.h"
@@ -426,8 +427,8 @@ static int decode_ga_specific_config(AACContext *ac, AVCodecContext *avctx,
     if (extension_flag) {
         switch (m4ac->object_type) {
         case AOT_ER_BSAC:
-            skip_bits(gb, 5);    // numOfSubFrame
-            skip_bits(gb, 11);   // layer_length
+            ac->bsac->numOfSubFrame = get_bits(gb, 5);    // numOfSubFrame
+            ac->bsac->layer_length  = get_bits(gb, 11);   // layer_length
             break;
         case AOT_ER_AAC_LC:
         case AOT_ER_AAC_LTP:
@@ -485,6 +486,7 @@ static int decode_audio_specific_config(AACContext *ac,
     case AOT_AAC_MAIN:
     case AOT_AAC_LC:
     case AOT_AAC_LTP:
+    case AOT_ER_BSAC:
         if (decode_ga_specific_config(ac, avctx, &gb, m4ac, m4ac->chan_config))
             return -1;
         break;
@@ -922,6 +924,150 @@ static void decode_mid_side_stereo(ChannelElement *cpe, GetBitContext *gb,
         memset(cpe->ms_mask, 1, cpe->ch[0].ics.num_window_groups * cpe->ch[0].ics.max_sfb * sizeof(cpe->ms_mask[0]));
     }
 }
+
+
+
+/**
+ * Decode bsac header; reference: table 4.35.
+ * common_window means the number of channel: 0 for mono, 1 for stereo(I GUESS)
+ */
+static int decode_bsac_header(AACContext *ac, IndividualChannelStream *ics,
+                              GetBitContext *gb, int common_window)
+{
+    int i, nch;
+    MPEG4AudioConfig *m4ac = &ac->m4ac;
+    int object_type = m4ac->object_type;
+
+    nch = common_window + 1;
+
+    ac->bsac->frameLength   = get_bits(gb,11) << 3;
+    ac->bsac->header_length = get_bits(gb, 4);
+    ac->bsac->sba_mode      = get_bits(gb, 1);
+    ac->bsac->top_layer     = get_bits(gb, 6);
+    ac->bsac->base_snf_thr  = get_bits(gb, 2) + 1;
+
+    for (i = 0; i < nch; i++)
+        ac->bsac->max_sfb[i] = get_bits(gb, 8);
+
+    ac->bsac->base_band = get_bits(gb, 5);
+
+    /*/////////////////
+    slayer_size = 0;
+    for (i = 0; i < num_window_groups; g++) {
+        if (ics->window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
+            end_index[i] = base_band * 4 * window_group_length[i];
+            if (object_type == 3 || object_type == 4) {
+                if (end_index[i]%32>=16)
+                    end_index[i] = (int)(end_index[i]/32)*32 + 20;
+                else if (end_index[g]%32 >= 4)
+                    end_index[i] = (int)(end_index[i]/32)*32 + 8;
+            }
+            else if (object_type == 5 || object_type == 6 || object_type == 7)
+                end_index[i] = (int)(end_index[i]/16)*16;
+            else if (object_type == 8 || object_type == 9 || object_type == 10)
+                end_index[i] = (int)(end_index[i]/32)*32;
+            else
+                end_index[i] = (int)(end_index[i]/64)*64;
+            end_cband[i] = (end_index[i] + 31) / 32;
+        }
+        else
+            end_cband[g] = base_band;
+        slayer_size += end_cband[g];
+    }
+    //////////*/
+    for (i = 0; i < nch; i++) {
+    ac->bsac->cband_si_type[i]  = get_bits(gb, 5);
+    ac->bsac->base_scf_model[i] = get_bits(gb, 3);
+    ac->bsac->enh_scf_model[i]  = get_bits(gb, 3);
+    ac->bsac->max_sfb_si_len[i] = get_bits(gb, 4);
+    }
+
+    return 0;
+}
+
+
+/**
+ * Decode bsac header; reference: table 4.35.
+ * common_window means the number of channel: 0 for mono, 1 for stereo(I GUESS)
+ */
+static int decode_bsac_general_header(AACContext *ac, IndividualChannelStream *ics,
+                                      GetBitContext *gb, int common_window)
+{
+    int i, nch;
+
+    if (get_bits1(gb)) {
+        av_log(ac->avctx, AV_LOG_ERROR, "Reserved bit set.\n");
+        memset(ics, 0, sizeof(IndividualChannelStream));
+        return -1;
+    }
+    ics->window_sequence[1] = ics->window_sequence[0];
+    ics->window_sequence[0] = get_bits(gb, 2);
+    ics->use_kb_window[1]   = ics->use_kb_window[0];
+    ics->use_kb_window[0]   = get_bits1(gb);
+    ics->num_window_groups  = 1;
+    ics->group_len[0]       = 1;
+    if (ics->window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
+        int i;
+        ics->max_sfb = get_bits(gb, 4);
+        for (i = 0; i < 7; i++) {
+            if (get_bits1(gb)) {
+                ics->group_len[ics->num_window_groups - 1]++;
+            } else {
+                ics->num_window_groups++;
+                ics->group_len[ics->num_window_groups - 1] = 1;
+            }
+        }
+        ics->num_windows       = 8;
+        ics->swb_offset        =    ff_swb_offset_128[ac->m4ac.sampling_index];
+        ics->num_swb           =   ff_aac_num_swb_128[ac->m4ac.sampling_index];
+        ics->tns_max_bands     = ff_tns_max_bands_128[ac->m4ac.sampling_index];
+    } else {
+        ics->max_sfb               = get_bits(gb, 6);
+        ics->num_windows           = 1;
+        ics->swb_offset            =    ff_swb_offset_1024[ac->m4ac.sampling_index];
+        ics->num_swb               =   ff_aac_num_swb_1024[ac->m4ac.sampling_index];
+        ics->tns_max_bands         = ff_tns_max_bands_1024[ac->m4ac.sampling_index];
+    }
+    if (ac->bsac->pns->present = get_bits1(gb))
+        ac->bsac->pns->start_sfb = get_bits(gb, 6);
+    if (nch == 2) {
+        ac->bsac->ms_present = get_bits(gb, 2);
+        if (ac->bsac->ms_present == 1) {
+            ac->bsac->ms_mask[0] = 1;
+        } else if (ac->bsac->ms_present == 2) {
+            ac->bsac->ms_mask[0] = 2;
+            for (i = 0; i < ics->max_sfb; i++)
+                ac->bsac->ms_mask[i+1] = 1;
+        } else if (ac->bsac->ms_present == 3) {
+            ac->bsac->ms_mask[0] = 1;
+            ac->bsac->is_intensity = 1;
+        }
+    }
+    for (i = 0; i < nch; i++) {
+        TemporalNoiseShaping *tns = ac->bsac->tns[i];
+        LongTermPrediction   *ltp = ac->bsac->ltp[i];
+        if (tns->present = get_bits1(gb) && decode_tns(ac, tns, gb, ics))
+            return -1;
+        if (ltp->present = get_bits1(gb))
+            decode_ltp(ac, ltp, gb, ics->max_sfb);
+    }
+}
+
+/**
+ * Decode bsac base element; reference: table 4.34.
+ */
+static int decode_bsac_element(AACContext *ac, IndividualChannelStream *ics,
+                              GetBitContext *gb, int common_window)
+{
+    int i, nch;
+
+    decode_bsac_header(ac, ics, gb, common_window);
+    decode_bsac_general_header(ac, ics, gb, common_window);
+    //byte_alignment();
+    //
+    return 0;
+}
+
 
 #ifndef VMUL2
 static inline float *VMUL2(float *dst, const float *v, unsigned idx,

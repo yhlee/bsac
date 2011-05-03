@@ -245,6 +245,38 @@ typedef struct {
     SpectralBandReplication sbr;
 } ChannelElement;
 
+typedef struct {
+    int present;
+    int start_sfb;
+} PerceptualNoise;
+
+/**
+ * bsac parameter
+ */
+typedef struct {
+    TemporalNoiseShaping *tns[2];
+    LongTermPrediction   *ltp[2];
+    PerceptualNoise      *pns;
+    int numOfSubFrame;
+    int layer_length;
+    int frameLength;
+    int header_length;
+    int sba_mode;
+    int top_layer;
+    int base_snf_thr;
+    int max_sfb[2];
+    int base_band;
+    int cband_si_type[2];
+    int base_scf_model[2];
+    int enh_scf_model[2];
+    int max_sfb_si_len[2];
+    // MS specific
+    int     ms_present;
+    uint8_t ms_mask[128];
+    // IS specific
+    uint8_t is_intensity;
+} BSAC;
+
 /**
  * main AAC context
  */
@@ -274,6 +306,14 @@ typedef struct {
      */
     DECLARE_ALIGNED(16, float, buf_mdct)[1024];
     /** @} */
+
+    /**
+     * @defgroup tables   Computed / set up during initialization.
+     * @{
+     */
+    BSAC *bsac;
+    /** @} */
+
 
     /**
      * @defgroup tables   Computed / set up during initialization.
