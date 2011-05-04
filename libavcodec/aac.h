@@ -257,6 +257,7 @@ typedef struct {
     TemporalNoiseShaping *tns[2];
     LongTermPrediction   *ltp[2];
     PerceptualNoise      *pns;
+    int nch;
     int numOfSubFrame;
     int layer_length;
     int frameLength;
@@ -275,6 +276,10 @@ typedef struct {
     uint8_t ms_mask[128];
     // IS specific
     uint8_t is_intensity;
+    // slayer
+    int slayer_size;
+    int end_index[8];
+    int end_cband[8];
 } BSAC;
 
 /**

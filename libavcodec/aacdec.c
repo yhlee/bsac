@@ -561,19 +561,29 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
 
     avctx->sample_fmt = AV_SAMPLE_FMT_S16;
 
-    AAC_INIT_VLC_STATIC( 0, 304);
-    AAC_INIT_VLC_STATIC( 1, 270);
-    AAC_INIT_VLC_STATIC( 2, 550);
-    AAC_INIT_VLC_STATIC( 3, 300);
-    AAC_INIT_VLC_STATIC( 4, 328);
-    AAC_INIT_VLC_STATIC( 5, 294);
-    AAC_INIT_VLC_STATIC( 6, 306);
-    AAC_INIT_VLC_STATIC( 7, 268);
-    AAC_INIT_VLC_STATIC( 8, 510);
-    AAC_INIT_VLC_STATIC( 9, 366);
-    AAC_INIT_VLC_STATIC(10, 462);
+    if (ac->m4ac.object_type == AOT_ER_BSAC)
+    {
+        ac->bsac->nch = avctx->channels;
 
-    ff_aac_sbr_init();
+    } else {
+        AAC_INIT_VLC_STATIC( 0, 304);
+        AAC_INIT_VLC_STATIC( 1, 270);
+        AAC_INIT_VLC_STATIC( 2, 550);
+        AAC_INIT_VLC_STATIC( 3, 300);
+        AAC_INIT_VLC_STATIC( 4, 328);
+        AAC_INIT_VLC_STATIC( 5, 294);
+        AAC_INIT_VLC_STATIC( 6, 306);
+        AAC_INIT_VLC_STATIC( 7, 268);
+        AAC_INIT_VLC_STATIC( 8, 510);
+        AAC_INIT_VLC_STATIC( 9, 366);
+        AAC_INIT_VLC_STATIC(10, 462);
+        INIT_VLC_STATIC(&vlc_scalefactors,7,FF_ARRAY_ELEMS(ff_aac_scalefactor_code),
+                        ff_aac_scalefactor_bits, sizeof(ff_aac_scalefactor_bits[0]), sizeof(ff_aac_scalefactor_bits[0]),
+                        ff_aac_scalefactor_code, sizeof(ff_aac_scalefactor_code[0]), sizeof(ff_aac_scalefactor_code[0]),
+                        352);
+
+        ff_aac_sbr_init();
+    }
 
     dsputil_init(&ac->dsp, avctx);
     ff_fmt_convert_init(&ac->fmt_conv, avctx);
@@ -588,10 +598,6 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
 
     ff_aac_tableinit();
 
-    INIT_VLC_STATIC(&vlc_scalefactors,7,FF_ARRAY_ELEMS(ff_aac_scalefactor_code),
-                    ff_aac_scalefactor_bits, sizeof(ff_aac_scalefactor_bits[0]), sizeof(ff_aac_scalefactor_bits[0]),
-                    ff_aac_scalefactor_code, sizeof(ff_aac_scalefactor_code[0]), sizeof(ff_aac_scalefactor_code[0]),
-                    352);
 
     ff_mdct_init(&ac->mdct,       11, 1, 1.0);
     ff_mdct_init(&ac->mdct_small,  8, 1, 1.0);
@@ -925,7 +931,45 @@ static void decode_mid_side_stereo(ChannelElement *cpe, GetBitContext *gb,
     }
 }
 
-
+static int bsac_init_layer_data(AACContext *ac, IndividualChannelStream *ics,
+                                GetBitContext *gb)
+{
+    int i;
+    int sampling_index = ac->m4ac.sampling_index;
+    ac->bsac->slayer_size = 0;
+    for (i = 0; i < ics->num_window_groups; i++) {
+        if (ics->window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
+            ac->bsac->end_index[i] = ac->bsac->base_band * 4 * ics->group_len[i];
+            switch(sampling_index) {
+                case 3:
+                case 4:
+                    if (ac->bsac->end_index[i]%32>=16)
+                        ac->bsac->end_index[i] = (int)(ac->bsac->end_index[i]/32)*32 + 20;
+                    else if (ac->bsac->end_index[i]%32 >= 4)
+                        ac->bsac->end_index[i] = (int)(ac->bsac->end_index[i]/32)*32 + 8;
+                    break;
+                case 5:
+                case 6:
+                case 7:
+                    ac->bsac->end_index[i] = (int)(ac->bsac->end_index[i]/16)*16;
+                    break;
+                case 8:
+                case 9:
+                case 10:
+                    ac->bsac->end_index[i] = (int)(ac->bsac->end_index[i]/32)*32;
+                    break;
+                default:
+                    ac->bsac->end_index[i] = (int)(ac->bsac->end_index[i]/64)*64;
+                    break;
+            }
+            ac->bsac->end_cband[i] = (ac->bsac->end_index[i] + 31)/32;
+        }
+        else
+            ac->bsac->end_cband[i] = ac->bsac->base_band;
+        ac->bsac->slayer_size += ac->bsac->end_cband[i];
+    }
+    return 0;
+}
 
 /**
  * Decode bsac header; reference: table 4.35.
@@ -934,9 +978,8 @@ static void decode_mid_side_stereo(ChannelElement *cpe, GetBitContext *gb,
 static int decode_bsac_header(AACContext *ac, IndividualChannelStream *ics,
                               GetBitContext *gb, int common_window)
 {
-    int i, nch;
     MPEG4AudioConfig *m4ac = &ac->m4ac;
-    int object_type = m4ac->object_type;
+    int i, nch;
 
     nch = common_window + 1;
 
@@ -951,30 +994,6 @@ static int decode_bsac_header(AACContext *ac, IndividualChannelStream *ics,
 
     ac->bsac->base_band = get_bits(gb, 5);
 
-    /*/////////////////
-    slayer_size = 0;
-    for (i = 0; i < num_window_groups; g++) {
-        if (ics->window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
-            end_index[i] = base_band * 4 * window_group_length[i];
-            if (object_type == 3 || object_type == 4) {
-                if (end_index[i]%32>=16)
-                    end_index[i] = (int)(end_index[i]/32)*32 + 20;
-                else if (end_index[g]%32 >= 4)
-                    end_index[i] = (int)(end_index[i]/32)*32 + 8;
-            }
-            else if (object_type == 5 || object_type == 6 || object_type == 7)
-                end_index[i] = (int)(end_index[i]/16)*16;
-            else if (object_type == 8 || object_type == 9 || object_type == 10)
-                end_index[i] = (int)(end_index[i]/32)*32;
-            else
-                end_index[i] = (int)(end_index[i]/64)*64;
-            end_cband[i] = (end_index[i] + 31) / 32;
-        }
-        else
-            end_cband[g] = base_band;
-        slayer_size += end_cband[g];
-    }
-    //////////*/
     for (i = 0; i < nch; i++) {
     ac->bsac->cband_si_type[i]  = get_bits(gb, 5);
     ac->bsac->base_scf_model[i] = get_bits(gb, 3);
@@ -994,6 +1013,7 @@ static int decode_bsac_general_header(AACContext *ac, IndividualChannelStream *i
                                       GetBitContext *gb, int common_window)
 {
     int i, nch;
+    BSAC *bsac = ac->bsac;
 
     if (get_bits1(gb)) {
         av_log(ac->avctx, AV_LOG_ERROR, "Reserved bit set.\n");
@@ -1028,24 +1048,26 @@ static int decode_bsac_general_header(AACContext *ac, IndividualChannelStream *i
         ics->num_swb               =   ff_aac_num_swb_1024[ac->m4ac.sampling_index];
         ics->tns_max_bands         = ff_tns_max_bands_1024[ac->m4ac.sampling_index];
     }
-    if (ac->bsac->pns->present = get_bits1(gb))
-        ac->bsac->pns->start_sfb = get_bits(gb, 6);
+
+    if (bsac->pns->present = get_bits1(gb))
+        bsac->pns->start_sfb = get_bits(gb, 6);
     if (nch == 2) {
-        ac->bsac->ms_present = get_bits(gb, 2);
-        if (ac->bsac->ms_present == 1) {
-            ac->bsac->ms_mask[0] = 1;
-        } else if (ac->bsac->ms_present == 2) {
-            ac->bsac->ms_mask[0] = 2;
+        bsac->ms_present = get_bits(gb, 2);
+        if (bsac->ms_present == 1) {
+            bsac->ms_mask[0] = 1;
+        } else if (bsac->ms_present == 2) {
+            bsac->ms_mask[0] = 2;
             for (i = 0; i < ics->max_sfb; i++)
-                ac->bsac->ms_mask[i+1] = 1;
-        } else if (ac->bsac->ms_present == 3) {
-            ac->bsac->ms_mask[0] = 1;
-            ac->bsac->is_intensity = 1;
+                bsac->ms_mask[i+1] = 1;
+        } else if (bsac->ms_present == 3) {
+            bsac->ms_mask[0] = 1;
+            bsac->is_intensity = 1;
         }
     }
+
     for (i = 0; i < nch; i++) {
-        TemporalNoiseShaping *tns = ac->bsac->tns[i];
-        LongTermPrediction   *ltp = ac->bsac->ltp[i];
+        TemporalNoiseShaping *tns = bsac->tns[i];
+        LongTermPrediction   *ltp = bsac->ltp[i];
         if (tns->present = get_bits1(gb) && decode_tns(ac, tns, gb, ics))
             return -1;
         if (ltp->present = get_bits1(gb))
@@ -1056,15 +1078,16 @@ static int decode_bsac_general_header(AACContext *ac, IndividualChannelStream *i
 /**
  * Decode bsac base element; reference: table 4.34.
  */
-static int decode_bsac_element(AACContext *ac, IndividualChannelStream *ics,
-                              GetBitContext *gb, int common_window)
+static int decode_bsac_base_element(AACContext *ac, IndividualChannelStream *ics,
+                                    GetBitContext *gb, int common_window)
 {
     int i, nch;
 
     decode_bsac_header(ac, ics, gb, common_window);
     decode_bsac_general_header(ac, ics, gb, common_window);
     //byte_alignment();
-    //
+    for (i = 0; i < ac->bsac->slayer_size; i++)
+        //decode_bsac_layer_element();
     return 0;
 }
 
