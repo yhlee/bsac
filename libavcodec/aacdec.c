@@ -978,7 +978,6 @@ static int bsac_init_layer_data(AACContext *ac, IndividualChannelStream *ics,
 static int decode_bsac_header(AACContext *ac, IndividualChannelStream *ics,
                               GetBitContext *gb, int common_window)
 {
-    MPEG4AudioConfig *m4ac = &ac->m4ac;
     int i, nch;
 
     nch = common_window + 1;
@@ -1081,7 +1080,7 @@ static int decode_bsac_general_header(AACContext *ac, IndividualChannelStream *i
 static int decode_bsac_base_element(AACContext *ac, IndividualChannelStream *ics,
                                     GetBitContext *gb, int common_window)
 {
-    int i, nch;
+    int i;
 
     decode_bsac_header(ac, ics, gb, common_window);
     decode_bsac_general_header(ac, ics, gb, common_window);
@@ -2236,6 +2235,12 @@ static int parse_adts_frame_header(AACContext *ac, GetBitContext *gb)
     return size;
 }
 
+static int bsac_decode_frame_int(AVCodecContext *avctx, void *data,
+                                 int *data_size, GetBitContext *gb)
+{
+    return 0;
+}
+
 static int aac_decode_frame_int(AVCodecContext *avctx, void *data,
                                 int *data_size, GetBitContext *gb)
 {
@@ -2364,6 +2369,7 @@ static int aac_decode_frame_int(AVCodecContext *avctx, void *data,
 static int aac_decode_frame(AVCodecContext *avctx, void *data,
                             int *data_size, AVPacket *avpkt)
 {
+    AACContext *ac = avctx->priv_data;
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     GetBitContext gb;
@@ -2373,8 +2379,14 @@ static int aac_decode_frame(AVCodecContext *avctx, void *data,
 
     init_get_bits(&gb, buf, buf_size * 8);
 
-    if ((err = aac_decode_frame_int(avctx, data, data_size, &gb)) < 0)
-        return err;
+    if (ac->m4ac.object_type == AOT_ER_BSAC)
+    {
+        if ((err = bsac_decode_frame_int(avctx, data, data_size, &gb)) < 0)
+            return err;
+    } else {
+        if ((err = aac_decode_frame_int(avctx, data, data_size, &gb)) < 0)
+            return err;
+    }
 
     buf_consumed = (get_bits_count(&gb) + 7) >> 3;
     for (buf_offset = buf_consumed; buf_offset < buf_size; buf_offset++)
