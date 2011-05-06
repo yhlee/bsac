@@ -250,6 +250,16 @@ typedef struct {
     int start_sfb;
 } PerceptualNoise;
 
+
+/**
+ * arDec parameter
+ */
+typedef struct {
+    uint64_t value;
+    uint64_t range;
+    int cw_len;
+} ArDecoder;
+
 /**
  * bsac parameter
  */
@@ -280,6 +290,12 @@ typedef struct {
     int slayer_size;
     int end_index[8];
     int end_cband[8];
+    // arDecoder
+    ArDecoder arDec[64];
+    uint64_t value;
+    uint64_t range;
+    int cw_len;
+    uint64_t *half;
 } BSAC;
 
 /**

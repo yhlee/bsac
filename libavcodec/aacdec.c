@@ -931,6 +931,85 @@ static void decode_mid_side_stereo(ChannelElement *cpe, GetBitContext *gb,
     }
 }
 
+static void bsac_init_ArDecode(BSAC *bsac, int index)
+{
+    bsac->arDec[index].value  = 0;
+    bsac->arDec[index].range  = 1;
+    bsac->arDec[index].cw_len = 30;
+}
+
+static void bsac_store_ArDecode(BSAC *bsac, int index)
+{
+    bsac->arDec[index].value  = bsac->value;
+    bsac->arDec[index].range  = bsac->range;
+    bsac->arDec[index].cw_len = bsac->cw_len;
+}
+
+static void bsac_set_ArDecode(BSAC *bsac, int index)
+{
+    bsac->value  = bsac->arDec[index].value;
+    bsac->range  = bsac->arDec[index].range;
+    bsac->cw_len = bsac->arDec[index].cw_len;
+}
+
+static int bsac_decode_symbol(BSAC *bsac, int *cum_freq, int *symbol,
+                              GetBitContext *gb)
+{
+  int  cum;
+  int  sym;
+
+  if (bsac->cw_len) {
+    bsac->range = (bsac->range<<bsac->cw_len);
+    bsac->value = (bsac->value<<bsac->cw_len) | get_bits(gb, bsac->cw_len);
+  }
+
+  bsac->range >>= 14;
+  cum = bsac->value / bsac->range;
+
+  for (sym = 0; cum_freq[sym] > cum; sym++);
+
+  *symbol = sym;
+
+  bsac->value -= (bsac->range * cum_freq[sym]);
+
+  if (sym > 0) {
+    bsac->range = bsac->range * (cum_freq[sym - 1] - cum_freq[sym]);
+  }
+  else {
+    bsac->range = bsac->range * (16384 - cum_freq[sym]);
+  }
+
+  for(bsac->cw_len = 0; bsac->range < bsac->half[bsac->cw_len]; bsac->cw_len++);
+
+  return bsac->cw_len;
+}
+
+static int bsac_decode_symbol2(BSAC *bsac, int freq0, int *symbol,
+                               GetBitContext *gb)
+{
+
+  if (bsac->cw_len) {
+    bsac->range = (bsac->range<<bsac->cw_len);
+    bsac->value = (bsac->value<<bsac->cw_len) | get_bits(gb, bsac->cw_len);
+  }
+
+  bsac->range >>= 14;
+
+  if ( (freq0 * bsac->range) <= bsac->value ) {
+    *symbol = 1;
+    bsac->value -= bsac->range * freq0;
+    bsac->range  = bsac->range * (16384 - freq0);
+  }
+  else {
+    *symbol = 0;
+    bsac->range  = bsac->range * freq0;
+  }
+
+  for(bsac->cw_len = 0; bsac->range < bsac->half[bsac->cw_len]; bsac->cw_len++);
+
+  return bsac->cw_len;
+}
+
 static int bsac_init_layer_data(AACContext *ac, IndividualChannelStream *ics,
                                 GetBitContext *gb)
 {
@@ -982,11 +1061,11 @@ static int decode_bsac_header(AACContext *ac, IndividualChannelStream *ics,
 
     nch = common_window + 1;
 
-    ac->bsac->frameLength   = get_bits(gb,11) << 3;
-    ac->bsac->header_length = get_bits(gb, 4);
-    ac->bsac->sba_mode      = get_bits(gb, 1);
-    ac->bsac->top_layer     = get_bits(gb, 6);
-    ac->bsac->base_snf_thr  = get_bits(gb, 2) + 1;
+    ac->bsac->frameLength   = get_bits(gb, 11) << 3;
+    ac->bsac->header_length = get_bits(gb,  4);
+    ac->bsac->sba_mode      = get_bits(gb,  1);
+    ac->bsac->top_layer     = get_bits(gb,  6);
+    ac->bsac->base_snf_thr  = get_bits(gb,  2) + 1;
 
     for (i = 0; i < nch; i++)
         ac->bsac->max_sfb[i] = get_bits(gb, 8);
