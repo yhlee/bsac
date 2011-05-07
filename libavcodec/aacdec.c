@@ -931,6 +931,74 @@ static void decode_mid_side_stereo(ChannelElement *cpe, GetBitContext *gb,
     }
 }
 
+
+static int bsac_select_freq1(int model_index, int bpl, int coded_samp_bit,
+                             int available_len)
+{
+    int no_model;
+    int dbpl;
+    int freq;
+
+    if (model_index >= 15)
+      dbpl =  model_index - 7  - bpl;
+    else
+      dbpl =  (model_index + 1) / 2  - bpl;
+
+    if (dbpl >= 4)
+      no_model = model_offset_tbl[model_index][7];
+    else
+      no_model = model_offset_tbl[model_index][dbpl + 3];
+
+    if (coded_samp_bit > 15)
+      no_model += 15;
+    else
+      no_model += coded_samp_bit - 1;
+
+    if(no_model >= 1016)
+        no_model = 1015;
+    freq = AModelSpectrum[no_model];
+    if (available_len < 14) {
+      if (AModelSpectrum[no_model] < min_freq[available_len])
+        freq = min_freq[available_len];
+      else if (AModelSpectrum[no_model] > (16384 - min_freq[available_len]))
+        freq = 16384 - min_freq[available_len];
+    }
+
+    return freq;
+}
+
+static int bsac_select_freq0(int model_index, int bpl, int enc_msb_vec,
+                             int samp_pos, int enc_csb_vec, int available_len)
+{
+    int no_model;
+    int dbpl;
+    int freq;
+
+    if (model_index >= 15)
+      dbpl =  model_index - 7  - bpl;
+    else
+      dbpl =  (model_index + 1) / 2  - bpl;
+    if (dbpl >= 3)
+      no_model = model_offset_tbl[model_index][3];
+    else
+      no_model = model_offset_tbl[model_index][dbpl];
+
+    no_model += small_step_offset_tbl[enc_msb_vec][samp_pos][enc_csb_vec];
+
+    if(no_model >= 1016)
+        no_model = 1015;
+    freq = AModelSpectrum[no_model];
+    if (available_len < 14) {
+      if (AModelSpectrum[no_model] < min_freq[available_len])
+        freq = min_freq[available_len];
+      else if (AModelSpectrum[no_model] > (16384 - min_freq[available_len]))
+        freq = 16384 - min_freq[available_len];
+    }
+
+    return freq;
+}
+
+
 static void bsac_init_ArDecode(BSAC *bsac, int index)
 {
     bsac->arDec[index].value  = 0;

@@ -47,7 +47,9 @@ extern const uint16_t AModelMsUsed[2];
 extern const uint16_t AModelNoiseFlag[2];
 extern const uint16_t AModelNoiseMode[4];
 
-
+extern const int max_cband_si_len_tbl[32];
+extern const int cband_si_cbook_tbl[32];
+extern const int min_freq[16];
 #endif /* AVCODEC_BSACTAB_H */
 
 
