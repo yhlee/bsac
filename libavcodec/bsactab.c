@@ -26,7 +26,7 @@
  */
 #include "bsactab.h"
 
-const uint16_t AModelScf[8][64] = {
+const int AModelScf[8][64] = {
 {
      1,     0,     0,     0,     0,     0,     0,     0,
      0,     0,     0,     0,     0,     0,     0,     0,
@@ -110,7 +110,7 @@ const uint16_t AModelScf[8][64] = {
 };
 
 
-const uint16_t AModelCBand[8][32] = {
+const int AModelCBand[8][32] = {
 {
  16118, 15193,  6930,  4771,     0,     0,     0,     0,
      0,     0,     0,     0,     0,     0,     0,     0,
@@ -161,7 +161,7 @@ const uint16_t AModelCBand[8][32] = {
 },
 };
 
-const uint16_t AModelSpectrum[1016] = {
+const int AModelSpectrum[1016] = {
  14592, 14848, 12032, 15104, 12032, 14080, 11264, 15104,
  12288, 13824, 11520, 14592, 12032, 14080, 11264, 10240,
  10240,  9472, 10496,  9728,  9984,  8960, 10752,  9984,
@@ -444,19 +444,19 @@ static uint16_t  AModelNoiseNrg[512]={
 };
 
 
-const int max_cband_si_len_tbl[32] = 
-{ 
+const int max_cband_si_len_tbl[32] =
+{
 	6, 5,   6, 5, 6,   6, 5, 6, 5,   6, 5, 6, 8,   6, 5, 6, 8, 9,
     6, 5, 6, 8, 10,   8, 10,   9, 10,  10,  12,  12,  12,  12
-}; 
+};
 
-const int cband_si_cbook_tbl[32] = 
-{ 
+const int cband_si_cbook_tbl[32] =
+{
 	0, 1,   0, 1, 2,   0, 1, 2, 3,   0, 1, 2, 4,   0, 1, 2, 4, 5,
     0, 1, 2, 4, 6,   4, 6,   5, 6,  6,  6,  6,  6,  6
-}; 
+};
 
-const int min_freq[16] = { 
+const int min_freq[16] = {
 	 16384,  8192,  4096,  2048,  1024,   512,   256,    128,
         64,    32,    16,     8,     4,     2,     1,      0
 };

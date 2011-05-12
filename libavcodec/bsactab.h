@@ -34,9 +34,9 @@
 
 #include <stdint.h>
 
-extern const uint16_t AModelScf[8][64];
-extern const uint16_t AModelCBand[8][32];
-extern const uint16_t AModelSpectrum[1016];
+extern const int AModelScf[8][64];
+extern const int AModelCBand[8][32];
+extern const int AModelSpectrum[1016];
 
 extern const int small_step_offset_tbl[16][4][8];
 

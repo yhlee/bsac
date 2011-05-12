@@ -1027,8 +1027,8 @@ static int bsac_decode_symbol(BSAC *bsac, int *cum_freq, int *symbol,
   int  sym;
 
   if (bsac->cw_len) {
-    bsac->range = (bsac->range<<bsac->cw_len);
-    bsac->value = (bsac->value<<bsac->cw_len) | get_bits(gb, bsac->cw_len);
+    bsac->range = (bsac->range << bsac->cw_len);
+    bsac->value = (bsac->value << bsac->cw_len) | get_bits(gb, bsac->cw_len);
   }
 
   bsac->range >>= 14;
@@ -1037,15 +1037,12 @@ static int bsac_decode_symbol(BSAC *bsac, int *cum_freq, int *symbol,
   for (sym = 0; cum_freq[sym] > cum; sym++);
 
   *symbol = sym;
-
   bsac->value -= (bsac->range * cum_freq[sym]);
 
-  if (sym > 0) {
+  if (sym > 0)
     bsac->range = bsac->range * (cum_freq[sym - 1] - cum_freq[sym]);
-  }
-  else {
+  else
     bsac->range = bsac->range * (16384 - cum_freq[sym]);
-  }
 
   for(bsac->cw_len = 0; bsac->range < bsac->half[bsac->cw_len]; bsac->cw_len++);
 
@@ -1057,13 +1054,13 @@ static int bsac_decode_symbol2(BSAC *bsac, int freq0, int *symbol,
 {
 
   if (bsac->cw_len) {
-    bsac->range = (bsac->range<<bsac->cw_len);
-    bsac->value = (bsac->value<<bsac->cw_len) | get_bits(gb, bsac->cw_len);
+    bsac->range = (bsac->range << bsac->cw_len);
+    bsac->value = (bsac->value << bsac->cw_len) | get_bits(gb, bsac->cw_len);
   }
 
   bsac->range >>= 14;
 
-  if ( (freq0 * bsac->range) <= bsac->value ) {
+  if ((freq0 * bsac->range) <= bsac->value) {
     *symbol = 1;
     bsac->value -= bsac->range * freq0;
     bsac->range  = bsac->range * (16384 - freq0);
@@ -1077,6 +1074,64 @@ static int bsac_decode_symbol2(BSAC *bsac, int freq0, int *symbol,
 
   return bsac->cw_len;
 }
+
+
+static int decode_bsac_cband_si(BSAC *bsac, int ***model_index, int *cband_si_type,
+                                int **start_cband, int **end_cband, int g,
+                                GetBitContext *gb)
+{
+    int ch;
+    int m;
+    int cband;
+    int cband_model;
+    int si_cw_len;
+    int max_model_index[2];
+    static int max_model0index_tbl[32] = {
+         6,  6,
+         8,  8,  8,
+        10, 10, 10, 10,
+        12, 12, 12, 12,
+        14, 14, 14, 14, 14,
+        15, 15, 15, 15, 15,
+        16, 16,
+        17, 17,
+        18, 19, 20, 21, 22
+    };
+
+    static int max_modelindex_tbl[32] = {
+         4,  6,
+         4,  6,  8,
+         4,  6,  8, 10,
+         4,  6,  8, 12,
+         4,  6,  8, 12, 14,
+         4,  6,  8, 12, 15,
+        12, 16,
+        14, 17,
+        18, 19, 20, 21, 22
+    };
+
+
+    si_cw_len = 0;
+    for(ch = 0; ch < bsac->nch; ch++) {
+        if(start_cband[ch][g] == 0) {
+            cband_model = 7;
+            max_model_index[ch] = max_model0index_tbl[cband_si_type[ch]];
+        } else {
+            cband_model = cband_si_cbook_tbl[cband_si_type[ch]];
+            max_model_index[ch] = max_modelindex_tbl[cband_si_type[ch]];
+        }
+        for (cband = start_cband[ch][g]; cband < end_cband[ch][g]; cband++) {
+            si_cw_len += bsac_decode_symbol(bsac, AModelCBand[cband_model], &m, gb);
+            model_index[ch][g][cband] = m;
+
+            if (model_index[ch][g][cband] > max_model_index[ch])
+                model_index[ch][g][cband] = max_model_index[ch];
+
+        }
+    }
+    return si_cw_len;
+}
+
 
 static int bsac_init_layer_data(AACContext *ac, IndividualChannelStream *ics,
                                 GetBitContext *gb)
