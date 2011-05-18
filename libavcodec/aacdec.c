@@ -1075,6 +1075,96 @@ static int bsac_decode_symbol2(BSAC *bsac, int freq0, int *symbol,
   return bsac->cw_len;
 }
 
+/*--------------------------------------------------------------*/
+/***********  scalefactor band side infomation   ****************/
+/*--------------------------------------------------------------*/
+static int decode_scfband_si(BSAC *bsac,
+    int scf[][136],
+    int scf_model[],
+    int maxSfb, //bsac
+    int stereo_si_coded[],
+    int g,
+    GetBitContext *gb)
+{
+    int ch;
+    int m;
+    int sfb;
+    int si_cw_len;
+
+    si_cw_len = 0;
+    for(ch = 0; ch < bsac->nch; ch++) {
+        for(sfb = bsac->start_sfb[ch][g]; sfb < bsac->end_sfb[ch][g]; sfb++) {
+            if(bsac->nch == 1) {
+                if(bsac->pns->present && sfb >= bsac->pns->start_sfb) {
+                    si_cw_len += bsac_decode_symbol(bsac, AModelNoiseFlag, &m, gb);
+                    bsac->pns->sfb_flag[0][g * maxSfb + sfb] = m;
+                }
+            } else if(stereo_si_coded[maxSfb * g + sfb] == 0) {
+                if(bsac->ms_present != 2) {
+                    m = 0;
+                    if(bsac->ms_present == 1)
+                        si_cw_len += bsac_decode_symbol(bsac, AModelMsUsed, &m, gb);
+                    else if(bsac->ms_present == 3)
+                        si_cw_len += bsac_decode_symbol(bsac, AModelStereoInfo, &m, gb);
+
+                    switch(m) {
+                    case 1:
+                        bsac->ms_mask[g * maxSfb + sfb + 1] = 1;
+                        break;
+                    case 2:
+                        bsac->is_mask[g * maxSfb + sfb] = 1;
+                        break;
+                    case 3:
+                        bsac->is_mask[g * maxSfb + sfb] = 2;
+                        break;
+                    }
+                    if(bsac->pns->present && sfb >= bsac->pns->start_sfb) {
+                        si_cw_len += bsac_decode_symbol(bsac, AModelNoiseFlag, &m, gb);
+                        bsac->pns->sfb_flag[0][g * maxSfb + sfb] = m;
+                        si_cw_len += bsac_decode_symbol(bsac, AModelNoiseFlag, &m, gb);
+                        bsac->pns->sfb_flag[1][g * maxSfb + sfb] = m;
+                        if(bsac->ms_present == 3 && bsac->is_mask[g * maxSfb + sfb] == 2) {
+                            if(bsac->pns->sfb_flag[0][g * maxSfb + sfb] && bsac->pns->sfb_flag[1][g * maxSfb + sfb]) {
+                                si_cw_len += bsac_decode_symbol(bsac, AModelNoiseMode, &m, gb);
+                                bsac->pns->sfb_mode[g * maxSfb + sfb] = m;
+                            }
+                        }
+                    }
+                }
+                stereo_si_coded[maxSfb * g + sfb] = 1;
+            }
+            if (bsac->pns->sfb_flag[ch][g * maxSfb + sfb]) {
+                if (bsac->pns->pcm_flag[ch] == 1) {
+                    si_cw_len += bsac_decode_symbol(bsac, AModelNoiseNrg, &m, gb);
+                    bsac->pns->max_energy[ch]      = m;
+                    bsac->pns->pcm_flag[ch] = 0;
+                }
+                si_cw_len += bsac_decode_symbol(bsac, AModelScf[scf_model[ch]], &m, gb);
+                scf[ch][g * maxSfb + sfb] = bsac->pns->max_energy[ch] - m;
+            } else if ( bsac->is_mask[g * maxSfb + sfb] && ch == 1) {
+                if (scf_model[ch]==0) {
+                    scf[ch][g * maxSfb + sfb] = 0;
+                } else {
+                    /* is_position */
+                    si_cw_len += bsac_decode_symbol(bsac, AModelScf[scf_model[ch]], &m, gb);
+                    if (m % 2)
+                        scf[ch][g * maxSfb + sfb] = -(int)((m + 1) / 2);
+                    else
+                        scf[ch][g * maxSfb + sfb] =  (int)(m / 2);
+                }
+            } else {
+                if (scf_model[ch] == 0) {
+                    scf[ch][g * maxSfb + sfb] = bsac->max_sfb[ch];
+                } else {
+                    si_cw_len += bsac_decode_symbol(bsac, AModelScf[scf_model[ch]], &m, gb);
+                    scf[ch][g * maxSfb + sfb] = bsac->max_sfb[ch] - m;
+                }
+            }
+        }
+    }
+
+    return si_cw_len;
+}
 
 static int decode_bsac_cband_si(BSAC *bsac, int ***model_index, int *cband_si_type,
                                 int **start_cband, int **end_cband, int g,

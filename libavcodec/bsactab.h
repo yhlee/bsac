@@ -34,22 +34,23 @@
 
 #include <stdint.h>
 
-extern const int AModelScf[8][64];
-extern const int AModelCBand[8][32];
-extern const int AModelSpectrum[1016];
+extern int AModelScf[8][64];
+extern int AModelCBand[8][32];
+extern int AModelSpectrum[1016];
 
-extern const int small_step_offset_tbl[16][4][8];
+extern int small_step_offset_tbl[16][4][8];
 
-extern const int *model_offset_tbl[32];
+extern int *model_offset_tbl[32];
 
-extern const uint16_t AModelStereoInfo[4];
-extern const uint16_t AModelMsUsed[2];
-extern const uint16_t AModelNoiseFlag[2];
-extern const uint16_t AModelNoiseMode[4];
+extern int AModelStereoInfo[4];
+extern int AModelMsUsed[2];
+extern int AModelNoiseFlag[2];
+extern int AModelNoiseMode[4];
+extern int AModelNoiseNrg[512];
 
-extern const int max_cband_si_len_tbl[32];
-extern const int cband_si_cbook_tbl[32];
-extern const int min_freq[16];
+extern int max_cband_si_len_tbl[32];
+extern int cband_si_cbook_tbl[32];
+extern int min_freq[16];
 #endif /* AVCODEC_BSACTAB_H */
 
 

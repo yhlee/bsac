@@ -26,7 +26,7 @@
  */
 #include "bsactab.h"
 
-const int AModelScf[8][64] = {
+int AModelScf[8][64] = {
 {
      1,     0,     0,     0,     0,     0,     0,     0,
      0,     0,     0,     0,     0,     0,     0,     0,
@@ -110,7 +110,7 @@ const int AModelScf[8][64] = {
 };
 
 
-const int AModelCBand[8][32] = {
+int AModelCBand[8][32] = {
 {
  16118, 15193,  6930,  4771,     0,     0,     0,     0,
      0,     0,     0,     0,     0,     0,     0,     0,
@@ -161,7 +161,7 @@ const int AModelCBand[8][32] = {
 },
 };
 
-const int AModelSpectrum[1016] = {
+int AModelSpectrum[1016] = {
  14592, 14848, 12032, 15104, 12032, 14080, 11264, 15104,
  12288, 13824, 11520, 14592, 12032, 14080, 11264, 10240,
  10240,  9472, 10496,  9728,  9984,  8960, 10752,  9984,
@@ -291,7 +291,7 @@ const int AModelSpectrum[1016] = {
   8704,  8704,  8704,  8704,  8704,  8192,  8448,  8704,
 };
 
-const int small_step_offset_tbl[16][4][8] = {
+int small_step_offset_tbl[16][4][8] = {
 /* sign_coded_vector = 0 */
 { {    0,   -1,   -1,   -1,   -1,   -1,   -1,   -1, }, /* bit_position = 0 */
   {    1,    2,   -1,   -1,   -1,   -1,   -1,   -1, }, /* bit_position = 1 */
@@ -390,7 +390,7 @@ const int small_step_offset_tbl[16][4][8] = {
  },
 };
 
-const int large_step_offset[10][8] = {
+int large_step_offset[10][8] = {
 {   0,   -1,   -1,   -1,   -1,   -1,   -1,   -1, }, /* Model No = 0 */
 {  15,   -1,   -1,   -1,   -1,   -1,   -1,   -1, }, /* Model No = 1 */
 {  30,   45,   -1,   -1,  110,   -1,   -1,   -1, }, /* Model No = 2 */
@@ -403,7 +403,7 @@ const int large_step_offset[10][8] = {
 { 974,  726,  791,  856,  989,  990,  993, 1000, }, /* Model No = 9 */
 };
 
-const int *model_offset_tbl[32] = {
+int *model_offset_tbl[32] = {
      NULL,
      large_step_offset[0],     large_step_offset[1],
      large_step_offset[2],     large_step_offset[3],
@@ -423,40 +423,40 @@ const int *model_offset_tbl[32] = {
      NULL,
 };
 
-const uint16_t AModelStereoInfo[4]={
+int AModelStereoInfo[4]={
     13926, 4096, 1638, 0
 };
 
-const uint16_t AModelMsUsed[2]={
+int AModelMsUsed[2]={
     11469, 0
 };
 
-const uint16_t AModelNoiseFlag[2]={
+int AModelNoiseFlag[2]={
     8192, 0
 };
 
-const uint16_t AModelNoiseMode[4]={
+int AModelNoiseMode[4]={
     12288, 8192, 4096, 0
 };
 
-static uint16_t  AModelNoiseNrg[512]={
+int AModelNoiseNrg[512]={
     0
 };
 
 
-const int max_cband_si_len_tbl[32] =
+int max_cband_si_len_tbl[32] =
 {
 	6, 5,   6, 5, 6,   6, 5, 6, 5,   6, 5, 6, 8,   6, 5, 6, 8, 9,
     6, 5, 6, 8, 10,   8, 10,   9, 10,  10,  12,  12,  12,  12
 };
 
-const int cband_si_cbook_tbl[32] =
+int cband_si_cbook_tbl[32] =
 {
 	0, 1,   0, 1, 2,   0, 1, 2, 3,   0, 1, 2, 4,   0, 1, 2, 4, 5,
     0, 1, 2, 4, 6,   4, 6,   5, 6,  6,  6,  6,  6,  6
 };
 
-const int min_freq[16] = {
+int min_freq[16] = {
 	 16384,  8192,  4096,  2048,  1024,   512,   256,    128,
         64,    32,    16,     8,     4,     2,     1,      0
 };

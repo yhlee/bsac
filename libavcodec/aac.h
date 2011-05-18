@@ -248,6 +248,10 @@ typedef struct {
 typedef struct {
     int present;
     int start_sfb;
+    int sfb_flag[2][136];
+    int sfb_mode[136];
+    int pcm_flag[2];
+    int max_energy[2];
 } PerceptualNoise;
 
 
@@ -267,6 +271,8 @@ typedef struct {
     TemporalNoiseShaping *tns[2];
     LongTermPrediction   *ltp[2];
     PerceptualNoise      *pns;
+    int start_sfb[2][8];
+    int end_sfb[2][8];
     uint8_t sba_mode;
     uint8_t cband_si_type[2];
     uint8_t nch;
@@ -284,6 +290,7 @@ typedef struct {
     // MS specific
     int     ms_present;
     uint8_t ms_mask[128];
+    uint8_t is_mask[128];
     // IS specific
     uint8_t is_intensity;
     // slayer
