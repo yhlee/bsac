@@ -273,10 +273,13 @@ typedef struct {
     PerceptualNoise      *pns;
     int start_sfb[2][8];
     int end_sfb[2][8];
-    uint8_t sba_mode;
-    uint8_t cband_si_type[2];
-    uint8_t nch;
-    uint8_t numOfSubFrame;
+    int sba_mode;
+    int cband_si_type[2];
+    int nch;
+    int windowSequence;
+    int num_window_groups;
+    int window_group_length[8];
+    int numOfSubFrame;
     int layer_length;
     int frameLength;
     int header_length;
