@@ -31,8 +31,25 @@
 #include "libavutil/mem.h"
 #include "aac.h"
 #include "aac_tablegen_decl.h"
-
 #include <stdint.h>
+
+typedef struct {
+  int     samp_rate;
+  int     nsfb1024;
+  short*  SFbands1024;
+  int     nsfb128;
+  short*  SFbands128;
+  int     nsfb960;
+  short*  SFbands960;
+  int     nsfb120;
+  short*  SFbands120;
+  int    shortFssWidth;
+  int    longFssGroups;
+  int     nsfb480;
+  short*  SFbands480;
+  int     nsfb512;
+  short*  SFbands512;
+} SR_Info;
 
 extern int AModelScf[8][64];
 extern int AModelCBand[8][32];
@@ -51,6 +68,7 @@ extern int AModelNoiseNrg[512];
 extern int max_cband_si_len_tbl[32];
 extern int cband_si_cbook_tbl[32];
 extern int min_freq[16];
+extern SR_Info samp_rate_info[16];
 #endif /* AVCODEC_BSACTAB_H */
 
 

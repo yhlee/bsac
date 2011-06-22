@@ -131,18 +131,19 @@ static const char overread_err[] = "Input buffer exhausted before END element fo
 #define  MAX_LENGTH  32
 #define  ALIGNING  8
 
-static int long_block_size;
-static int short_block_size;
-static int long_sfb_top;
-static int short_sfb_top;
-static int fs_idx;
+static double bsac_for_exp_tbl[128];
+static double bsac_inv_exp_tbl[128];
 
-static unsigned char bs_buf[4096];  /* bit stream buffer */
-static int bs_buf_size;    /* size of buffer (in number of bytes) */
-static int bs_buf_byte_idx;  /* pointer to top byte in buffer */
-static int bs_buf_bit_idx;    /* pointer to top bit of top byte in buffer */
-static int bs_eob;      /* end of buffer index */
-static int bs_eobs;    /* end of bit stream flag */
+static double  sam_exptable[128];
+static double  sam_iq_exp_tbl[128];
+
+
+static unsigned char bs_buf[4096];
+static int bs_buf_size;
+static int bs_buf_byte_idx;
+static int bs_buf_bit_idx;
+static int bs_eob;
+static int bs_eobs;
 static int sam_scale_bits_dec[100];
 
 static void sam_init_layer_buf(void);
@@ -974,28 +975,28 @@ static int bsac_select_freq1(int model_index, int bpl, int coded_samp_bit,
     int freq;
 
     if (model_index >= 15)
-      dbpl =  model_index - 7  - bpl;
+        dbpl = model_index - 7 - bpl;
     else
-      dbpl =  (model_index + 1) / 2  - bpl;
+        dbpl = (model_index + 1) / 2 - bpl;
 
     if (dbpl >= 4)
-      no_model = model_offset_tbl[model_index][7];
+        no_model = model_offset_tbl[model_index][7];
     else
-      no_model = model_offset_tbl[model_index][dbpl + 3];
+        no_model = model_offset_tbl[model_index][dbpl + 3];
 
     if (coded_samp_bit > 15)
-      no_model += 15;
+        no_model += 15;
     else
-      no_model += coded_samp_bit - 1;
+        no_model += coded_samp_bit - 1;
 
-    if(no_model >= 1016)
+    if (no_model >= 1016)
         no_model = 1015;
     freq = AModelSpectrum[no_model];
     if (available_len < 14) {
-      if (AModelSpectrum[no_model] < min_freq[available_len])
-        freq = min_freq[available_len];
-      else if (AModelSpectrum[no_model] > (16384 - min_freq[available_len]))
-        freq = 16384 - min_freq[available_len];
+        if (AModelSpectrum[no_model] < min_freq[available_len])
+            freq = min_freq[available_len];
+        else if (AModelSpectrum[no_model] > (16384 - min_freq[available_len]))
+            freq = 16384 - min_freq[available_len];
     }
 
     return freq;
@@ -1009,24 +1010,24 @@ static int bsac_select_freq0(int model_index, int bpl, int enc_msb_vec,
     int freq;
 
     if (model_index >= 15)
-      dbpl =  model_index - 7  - bpl;
+        dbpl = model_index - 7 - bpl;
     else
-      dbpl =  (model_index + 1) / 2  - bpl;
+        dbpl = (model_index + 1) / 2 - bpl;
     if (dbpl >= 3)
-      no_model = model_offset_tbl[model_index][3];
+        no_model = model_offset_tbl[model_index][3];
     else
-      no_model = model_offset_tbl[model_index][dbpl];
+        no_model = model_offset_tbl[model_index][dbpl];
 
     no_model += small_step_offset_tbl[enc_msb_vec][samp_pos][enc_csb_vec];
 
-    if(no_model >= 1016)
+    if (no_model >= 1016)
         no_model = 1015;
     freq = AModelSpectrum[no_model];
     if (available_len < 14) {
-      if (AModelSpectrum[no_model] < min_freq[available_len])
-        freq = min_freq[available_len];
-      else if (AModelSpectrum[no_model] > (16384 - min_freq[available_len]))
-        freq = 16384 - min_freq[available_len];
+        if (AModelSpectrum[no_model] < min_freq[available_len])
+            freq = min_freq[available_len];
+        else if (AModelSpectrum[no_model] > (16384 - min_freq[available_len]))
+            freq = 16384 - min_freq[available_len];
     }
 
     return freq;
@@ -1057,30 +1058,33 @@ static void bsac_set_ArDecode(BSAC *bsac, int index)
 static int bsac_decode_symbol(BSAC *bsac, int *cum_freq, int *symbol,
                               GetBitContext *gb)
 {
-  int  cum;
-  int  sym;
+  int cum;
+    int sym;
 
-  if (bsac->cw_len) {
-    bsac->range = (bsac->range << bsac->cw_len);
-    bsac->value = (bsac->value << bsac->cw_len) | sam_getbitsfrombuf(bsac->cw_len);
-  }
+    if (bsac->cw_len) {
+        bsac->range = (bsac->range << bsac->cw_len);
+        bsac->value = (bsac->value << bsac->cw_len) |
+                       sam_getbitsfrombuf(bsac->cw_len);
+    }
 
-  bsac->range >>= 14;
-  cum = bsac->value / bsac->range;
+    bsac->range >>= 14;
+    cum = bsac->value / bsac->range;
 
-  for (sym = 0; cum_freq[sym] > cum; sym++);
+    for (sym = 0; cum_freq[sym] > cum; sym++)
+        ;
 
-  *symbol = sym;
-  bsac->value -= (bsac->range * cum_freq[sym]);
+    *symbol = sym;
+    bsac->value -= (bsac->range * cum_freq[sym]);
 
-  if (sym > 0)
-    bsac->range = bsac->range * (cum_freq[sym - 1] - cum_freq[sym]);
-  else
-    bsac->range = bsac->range * (16384 - cum_freq[sym]);
+    if (sym > 0)
+        bsac->range = bsac->range * (cum_freq[sym - 1] - cum_freq[sym]);
+    else
+        bsac->range = bsac->range * (16384 - cum_freq[sym]);
 
-  for(bsac->cw_len = 0; bsac->range < bsac->half[bsac->cw_len]; bsac->cw_len++);
+    for (bsac->cw_len = 0; bsac->range < bsac->half[bsac->cw_len]; bsac->cw_len++)
+        ;
 
-  return bsac->cw_len;
+    return bsac->cw_len;
 }
 
 static int bsac_decode_symbol2(BSAC *bsac, int freq0, int *symbol,
@@ -1088,30 +1092,29 @@ static int bsac_decode_symbol2(BSAC *bsac, int freq0, int *symbol,
 {
 
   if (bsac->cw_len) {
-    bsac->range = (bsac->range << bsac->cw_len);
-    bsac->value = (bsac->value << bsac->cw_len) | sam_getbitsfrombuf(bsac->cw_len);
-  }
+        bsac->range = (bsac->range << bsac->cw_len);
+        bsac->value = (bsac->value << bsac->cw_len) |
+                       sam_getbitsfrombuf(bsac->cw_len);
+    }
 
-  bsac->range >>= 14;
+    bsac->range >>= 14;
 
-  if ((freq0 * bsac->range) <= bsac->value) {
-    *symbol = 1;
-    bsac->value -= bsac->range * freq0;
-    bsac->range  = bsac->range * (16384 - freq0);
-  }
-  else {
-    *symbol = 0;
-    bsac->range  = bsac->range * freq0;
-  }
+    if ((freq0 * bsac->range) <= bsac->value) {
+        *symbol = 1;
+        bsac->value -= bsac->range * freq0;
+        bsac->range = bsac->range * (16384 - freq0);
+    } else {
+        *symbol = 0;
+        bsac->range = bsac->range * freq0;
+    }
 
-  for(bsac->cw_len = 0; bsac->range < bsac->half[bsac->cw_len]; bsac->cw_len++);
+    for (bsac->cw_len = 0; bsac->range < bsac->half[bsac->cw_len]; bsac->cw_len++)
+        ;
 
-  return bsac->cw_len;
+    return bsac->cw_len;
 }
 
-/*--------------------------------------------------------------*/
-/***********  scalefactor band side infomation   ****************/
-/*--------------------------------------------------------------*/
+
 static int decode_bsac_scfband_si(BSAC *bsac,
     int scf[][MAX_SCFAC_BANDS],
     int scf_model[],
@@ -1265,32 +1268,37 @@ static int bsac_init_layer_data(AACContext *ac, GetBitContext *gb)
     ac->bsac->slayer_size = 0;
     for (i = 0; i < ac->bsac->num_window_groups; i++) {
         if (ac->bsac->windowSequence == EIGHT_SHORT_SEQUENCE) {
-            ac->bsac->end_index[i] = ac->bsac->base_band * 4 * ac->bsac->window_group_length[i];
-            switch(sampling_index) {
-                case 3:
-                case 4:
-                    if (ac->bsac->end_index[i]%32>=16)
-                        ac->bsac->end_index[i] = (int)(ac->bsac->end_index[i]/32)*32 + 20;
-                    else if (ac->bsac->end_index[i]%32 >= 4)
-                        ac->bsac->end_index[i] = (int)(ac->bsac->end_index[i]/32)*32 + 8;
-                    break;
-                case 5:
-                case 6:
-                case 7:
-                    ac->bsac->end_index[i] = (int)(ac->bsac->end_index[i]/16)*16;
-                    break;
-                case 8:
-                case 9:
-                case 10:
-                    ac->bsac->end_index[i] = (int)(ac->bsac->end_index[i]/32)*32;
-                    break;
-                default:
-                    ac->bsac->end_index[i] = (int)(ac->bsac->end_index[i]/64)*64;
-                    break;
+            ac->bsac->end_index[i] = ac->bsac->base_band * 4
+                    * ac->bsac->window_group_length[i];
+            switch (sampling_index) {
+            case 3:
+            case 4:
+                if (ac->bsac->end_index[i] % 32 >= 16)
+                    ac->bsac->end_index[i]
+                            = (int) (ac->bsac->end_index[i] / 32) * 32 + 20;
+                else if (ac->bsac->end_index[i] % 32 >= 4)
+                    ac->bsac->end_index[i]
+                            = (int) (ac->bsac->end_index[i] / 32) * 32 + 8;
+                break;
+            case 5:
+            case 6:
+            case 7:
+                ac->bsac->end_index[i] = (int) (ac->bsac->end_index[i] / 16)
+                        * 16;
+                break;
+            case 8:
+            case 9:
+            case 10:
+                ac->bsac->end_index[i] = (int) (ac->bsac->end_index[i] / 32)
+                        * 32;
+                break;
+            default:
+                ac->bsac->end_index[i] = (int) (ac->bsac->end_index[i] / 64)
+                        * 64;
+                break;
             }
-            ac->bsac->end_cband[i] = (ac->bsac->end_index[i] + 31)/32;
-        }
-        else
+            ac->bsac->end_cband[i] = (ac->bsac->end_index[i] + 31) / 32;
+        } else
             ac->bsac->end_cband[i] = ac->bsac->base_band;
         ac->bsac->slayer_size += ac->bsac->end_cband[i];
     }
@@ -1304,9 +1312,9 @@ static int bsac_init_layer_data(AACContext *ac, GetBitContext *gb)
 static int decode_bsac_header(AACContext *ac, IndividualChannelStream *ics,
                               GetBitContext *gb, int common_window)
 {
-    int i, nch;
+    int i;
 
-    nch = common_window + 1;
+    ac->bsac->nch = common_window + 1;
 
     ac->bsac->frameLength   = get_bits(gb, 11) << 3;
     ac->bsac->header_length = get_bits(gb,  4);
@@ -1314,12 +1322,12 @@ static int decode_bsac_header(AACContext *ac, IndividualChannelStream *ics,
     ac->bsac->top_layer     = get_bits(gb,  6);
     ac->bsac->base_snf_thr  = get_bits(gb,  2) + 1;
 
-    for (i = 0; i < nch; i++)
+    for (i = 0; i < ac->bsac->nch; i++)
         ac->bsac->max_sfb[i] = get_bits(gb, 8);
 
     ac->bsac->base_band = get_bits(gb, 5);
 
-    for (i = 0; i < nch; i++) {
+    for (i = 0; i < ac->bsac->nch; i++) {
     ac->bsac->cband_si_type[i]  = get_bits(gb, 5);
     ac->bsac->base_scf_model[i] = get_bits(gb, 3);
     ac->bsac->enh_scf_model[i]  = get_bits(gb, 3);
@@ -1331,8 +1339,7 @@ static int decode_bsac_header(AACContext *ac, IndividualChannelStream *ics,
 
 
 /**
- * Decode bsac header; reference: table 4.35.
- * common_window means the number of channel: 0 for mono, 1 for stereo(I GUESS)
+ * Decode bsac header; reference: table 4.xx.
  */
 static int decode_bsac_general_header(AACContext *ac, IndividualChannelStream *ics,
                                       GetBitContext *gb, int common_window)
@@ -1411,14 +1418,13 @@ static int decode_bsac_base_element(AACContext *ac, IndividualChannelStream *ics
     decode_bsac_header(ac, ics, gb, common_window);
     decode_bsac_general_header(ac, ics, gb, common_window);
     //byte_alignment();
-    for (i = 0; i < ac->bsac->slayer_size; i++)
+    for (i = 0; i < ac->bsac->slayer_size; i++) {
         //decode_bsac_layer_element();
+    }
     return 0;
 }
 
-/*--------------------------------------------------------------*/
-/***********     Bit-Sliced Spectral Data        ****************/
-/*--------------------------------------------------------------*/
+
 static int decode_bsac_spectra(BSAC *bsac,
                               int *sample[][8],
                               int s_reg,
@@ -1433,24 +1439,23 @@ static int decode_bsac_spectra(BSAC *bsac,
                               int *sign_coded[][8],
                               int *enc_sign_vec[][8],
                               int *enc_vec[][8],
-                              GetBitContext *gb
-        )
+                              GetBitContext *gb)
 {
     int ch, i, m, k;
     int maxbpl;
-    int  bpl;
-    int  cband;
-    int  maxhalf;
-    int  freq;
-    int  cw_len;
-    int  cw_len1;
-    int  reg;
+    int bpl;
+    int cband;
+    int maxhalf;
+    int freq;
+    int cw_len;
+    int cw_len1;
+    int reg;
 
     maxbpl = 0;
 
-    for(ch = 0; ch < bsac->nch; ch++)
+    for (ch = 0; ch < bsac->nch; ch++)
         for (reg = s_reg; reg < e_reg; reg++)
-            for(i = s_freq[ch][reg]; i< e_freq[ch][reg]; i++)
+            for (i = s_freq[ch][reg]; i < e_freq[ch][reg]; i++)
                 if (maxbpl < cur_bpl[ch][reg][i])
                     maxbpl = cur_bpl[ch][reg][i];
 
@@ -1461,16 +1466,18 @@ static int decode_bsac_spectra(BSAC *bsac,
         maxhalf = 1 << (bpl - 1);
         for (reg = s_reg; reg < e_reg; reg++)
             for (i = s_freq[0][reg]; i < e_freq[0][reg]; i++)
-                for(ch = 0; ch < bsac->nch; ch++) {
+                for (ch = 0; ch < bsac->nch; ch++) {
 
                     if (cur_bpl[ch][reg][i] < bpl)
                         continue;
 
-                    if (coded_samp_bit[ch][reg][i] == 0 || sign_coded[ch][reg][i] == 1) {
+                    if (coded_samp_bit[ch][reg][i] == 0
+                            || sign_coded[ch][reg][i] == 1) {
 
                         cband = i / 32;
                         if (i % 4 == 0) {
-                            enc_sign_vec[ch][reg][i / 4] |= enc_vec[ch][reg][i / 4];
+                            enc_sign_vec[ch][reg][i / 4] |= enc_vec[ch][reg][i
+                                    / 4];
                             enc_vec[ch][reg][i / 4] = 0;
                         }
 
@@ -1478,19 +1485,19 @@ static int decode_bsac_spectra(BSAC *bsac,
                         if (!bsac->sba_mode)
                             cw_len1 = 100;
                         if (coded_samp_bit[ch][reg][i])
-                            freq  = bsac_select_freq1(model_index[ch][reg][cband], bpl,
-                                                      coded_samp_bit[ch][reg][i],     cw_len1);
+                            freq = bsac_select_freq1(
+                                    model_index[ch][reg][cband], bpl,
+                                    coded_samp_bit[ch][reg][i], cw_len1);
                         else
 
-                            freq  = bsac_select_freq0(model_index[ch][reg][cband] , bpl,
-                                                      enc_sign_vec[ch][reg][i / 4], i % 4,
-                                                      enc_vec[ch][reg][i / 4], cw_len1);
+                            freq = bsac_select_freq0(
+                                    model_index[ch][reg][cband], bpl,
+                                    enc_sign_vec[ch][reg][i / 4], i % 4,
+                                    enc_vec[ch][reg][i / 4], cw_len1);
 
                         k = bsac_decode_symbol2(bsac, freq, &m, gb);
                         cw_len -= k;
 
-                        /* disassemble the decoded vector and
-                        reconstruct the decoded sample */
                         if (m) {
                             if (sample[ch][reg][i] >= 0)
                                 sample[ch][reg][i] += maxhalf;
@@ -1498,30 +1505,32 @@ static int decode_bsac_spectra(BSAC *bsac,
                                 sample[ch][reg][i] -= maxhalf;
                         }
 
-                        enc_vec[ch][reg][i / 4] = (enc_vec[ch][reg][i / 4] << 1) | m;
-                        coded_samp_bit[ch][reg][i] = (coded_samp_bit[ch][reg][i] << 1) | m;
+                        enc_vec[ch][reg][i / 4]
+                                = (enc_vec[ch][reg][i / 4] << 1) | m;
+                        coded_samp_bit[ch][reg][i]
+                                = (coded_samp_bit[ch][reg][i] << 1) | m;
                     }
 
-                    if ( coded_samp_bit[ch][reg][i] && sign_coded[ch][reg][i] == 0) {
-                        if (cw_len <= 0 ) return (available_len-cw_len);
+                    if (coded_samp_bit[ch][reg][i] && sign_coded[ch][reg][i]
+                            == 0) {
+                        if (cw_len <= 0)
+                            return (available_len - cw_len);
 
                         cw_len -= bsac_decode_symbol2(bsac, 8192, &m, gb);
 
-                        if (m) sample[ch][reg][i] *= -1;
+                        if (m)
+                            sample[ch][reg][i] *= -1;
                         sign_coded[ch][reg][i] = 0x01;
                     }
                     cur_bpl[ch][reg][i] -= 1;
 
-                    if (cw_len <= 0 ) return (available_len - cw_len);
+                    if (cw_len <= 0)
+                        return (available_len - cw_len);
                 }
     }
 
     return (available_len - cw_len);
 }
-
-static double bsac_for_exp_tbl[128];
-static double bsac_inv_exp_tbl[128];
-
 
 static double bsac_calc_scale(int fac)
 {
@@ -1569,6 +1578,7 @@ static void bsac_dequantization(BSAC *bsac,
 		                          int samples[],
 		                          int maxSfb,
 		                          double decSpectrum[],
+		                          int ch,
 		                          GetBitContext *gb)
 {
     int sfb, i, k;
@@ -1581,7 +1591,7 @@ static void bsac_dequantization(BSAC *bsac,
 
     if(bsac->windowSequence != EIGHT_SHORT_SEQUENCE) {
         for(sfb = 0; sfb < maxSfb; sfb++) {
-            if(bsac->nch == 1 && bsac->is_mask[sfb])
+            if(ch == 1 && bsac->is_mask[sfb])
             	continue;
             scale = bsac_calc_scale(scalefactors[sfb] - 100);
             for(i = swb_offset_long[sfb]; i < swb_offset_long[sfb + 1]; i++) {
@@ -1591,11 +1601,11 @@ static void bsac_dequantization(BSAC *bsac,
 
     } else {
         int w, b, s, iquant;
-        /* resuffling and scaling the decoded spectrum */
+
         s = 0;
         for(w = 0; w < bsac->num_window_groups; w++) {
             for(sfb = 0; sfb < maxSfb; sfb++) {
-                if(bsac->nch == 1 && bsac->is_mask[(w * maxSfb) + sfb])
+                if(ch == 1 && bsac->is_mask[(w * maxSfb) + sfb])
                 	continue;
                 scale = bsac_calc_scale(scalefactors[w * maxSfb + sfb] - 100);
                 for (b = 0; b < bsac->window_group_length[w]; b++) {
@@ -1613,112 +1623,105 @@ static void bsac_dequantization(BSAC *bsac,
 
 
 
-/* open the device to read the bit stream from it */
-static void sam_init_layer_buf()
-{
-  int i;
-  bs_buf_byte_idx=4095;
-  bs_buf_bit_idx=0;
-  bs_eob = 0;
-  bs_eobs = 0;
-  bs_buf_size = 4096;
-  for(i = 0; i < bs_buf_size; i++)
-    bs_buf[i] = 0;
+static void sam_init_layer_buf() {
+    int i;
+    bs_buf_byte_idx = 4095;
+    bs_buf_bit_idx = 0;
+    bs_eob = 0;
+    bs_eobs = 0;
+    bs_buf_size = 4096;
+    for (i = 0; i < bs_buf_size; i++)
+        bs_buf[i] = 0;
 }
 
-static void sam_setRBitBufPos(int pos)
-{
-  bs_buf_byte_idx = pos / 8;
-  bs_buf_bit_idx  = 8 - (pos % 8);
+static void sam_setRBitBufPos(int pos) {
+    bs_buf_byte_idx = pos / 8;
+    bs_buf_bit_idx = 8 - (pos % 8);
 }
 
-static int sam_getRBitBufPos()
-{
-  return ((bs_buf_byte_idx * 8) + (8 - bs_buf_bit_idx));
+static int sam_getRBitBufPos() {
+    return ((bs_buf_byte_idx * 8) + (8 - bs_buf_bit_idx));
 }
 
-static int putmask[9]={0x0, 0x1, 0x3, 0x7, 0xf, 0x1f, 0x3f, 0x7f, 0xff};
+static int putmask[9] = { 0x0, 0x1, 0x3, 0x7, 0xf, 0x1f, 0x3f, 0x7f, 0xff };
 
-/*read N bit from the bit stream */
-static unsigned int sam_getbitsfrombuf(int N)
-{
-  unsigned long val=0;
-  register int i;
-  register int j = N;
-  register int k, tmp;
 
-  if(N <= 0) return 0;
+static unsigned int sam_getbitsfrombuf(int N) {
+    unsigned long val = 0;
+    register int i;
+    register int j = N;
+    register int k, tmp;
 
-  if (N > MAX_LENGTH)
-      av_log(NULL, AV_LOG_ERROR, "Cannot read or write more than %d bits at a time.\n", MAX_LENGTH);
+    if (N <= 0)
+        return 0;
 
-  while (j > 0) {
-    if (!bs_buf_bit_idx) {
-      bs_buf_bit_idx = 8;
-      bs_buf_byte_idx++;
-      if ((bs_buf_byte_idx >= (bs_buf_size - MINIMUM)) || (bs_buf_byte_idx == bs_eob)) {
-        if (bs_eob) {
-          bs_eobs = 1;
-          return 0;
-        } else {
-          for (i=bs_buf_byte_idx; i<bs_buf_size;i++)
-            bs_buf[i-bs_buf_byte_idx] = bs_buf[i];
-          av_log(NULL, AV_LOG_ERROR, "Bit buffer error!\n");
+    if (N > MAX_LENGTH)
+        av_log(NULL, AV_LOG_ERROR,
+                "Cannot read or write more than %d bits at a time.\n",
+                MAX_LENGTH);
+
+    while (j > 0) {
+        if (!bs_buf_bit_idx) {
+            bs_buf_bit_idx = 8;
+            bs_buf_byte_idx++;
+            if ((bs_buf_byte_idx >= (bs_buf_size - MINIMUM))
+                    || (bs_buf_byte_idx == bs_eob)) {
+                if (bs_eob) {
+                    bs_eobs = 1;
+                    return 0;
+                } else {
+                    for (i = bs_buf_byte_idx; i < bs_buf_size; i++)
+                        bs_buf[i - bs_buf_byte_idx] = bs_buf[i];
+                    av_log(NULL, AV_LOG_ERROR, "Bit buffer error!\n");
+                }
+            }
         }
-      }
+        k = (j < bs_buf_bit_idx) ? j : bs_buf_bit_idx;
+        tmp = bs_buf[bs_buf_byte_idx] & putmask[bs_buf_bit_idx];
+        val |= (tmp >> (bs_buf_bit_idx - k)) << (j - k);
+        bs_buf_bit_idx -= k;
+        j -= k;
     }
-    k = (j < bs_buf_bit_idx) ? j : bs_buf_bit_idx;
-    tmp = bs_buf[bs_buf_byte_idx]&putmask[bs_buf_bit_idx];
-    val |= (tmp >> (bs_buf_bit_idx-k)) << (j-k);
-    bs_buf_bit_idx -= k;
-    j -= k;
-  }
 
-  return(val);
-}
-
-/*write N bits into the bit stream */
-static int sam_putbits2buf(unsigned int val, int N)
-{
-  register int j = N;
-  register int k, tmp;
-
-  if (N < 1)
-    return 0;
-  if (N > MAX_LENGTH) {
-      av_log(NULL, AV_LOG_ERROR, "Cannot read or write more than %d bits at a time.\n", MAX_LENGTH);
-    return 0;
-  }
-
-  while (j > 0) {
-    k = (j < bs_buf_bit_idx) ? j : bs_buf_bit_idx;
-    tmp = val >> (j-k);
-    bs_buf[bs_buf_byte_idx] |= (tmp&putmask[k]) << (bs_buf_bit_idx-k);
-    bs_buf_bit_idx -= k;
-    if (!bs_buf_bit_idx) {
-       bs_buf_bit_idx = 8;
-       bs_buf_byte_idx++;
-       if (bs_buf_byte_idx > bs_buf_size-1) {
-           av_log(NULL, AV_LOG_ERROR, "SAM: bitstream buffer overflow!\n");
-       }
-    }
-    j -= k;
-  }
- return N;
+    return (val);
 }
 
 
-static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int frameLength, int sba_mode,
-        int enc_top_layer, int base_snf, int base_band, int maxSfb,
-        int windowSequence, int num_window_groups,
-        int window_group_length[8],
-        int maxScalefactors[], int cband_si_type[], int scf_model0[],
-        int scf_model1[], int max_sfb_si_len[],
-        int stereo_mode, int ms_mask[], int is_info[], int pns_data_present,
-        int pns_sfb_start, int pns_sfb_flag[][MAX_SCFAC_BANDS],
-        int pns_sfb_mode[MAX_SCFAC_BANDS], int swb_offset[][52], int top_band,
-        int used_bits, int sample_buf[][1024],
-        int scalefactors[][MAX_SCFAC_BANDS], int nch, GetBitContext *gb) {
+static int sam_putbits2buf(unsigned int val, int N) {
+    register int j = N;
+    register int k, tmp;
+
+    if (N < 1)
+        return 0;
+    if (N > MAX_LENGTH) {
+        av_log(NULL, AV_LOG_ERROR,
+                "Cannot read or write more than %d bits at a time.\n",
+                MAX_LENGTH);
+        return 0;
+    }
+
+    while (j > 0) {
+        k = (j < bs_buf_bit_idx) ? j : bs_buf_bit_idx;
+        tmp = val >> (j - k);
+        bs_buf[bs_buf_byte_idx] |= (tmp & putmask[k]) << (bs_buf_bit_idx - k);
+        bs_buf_bit_idx -= k;
+        if (!bs_buf_bit_idx) {
+            bs_buf_bit_idx = 8;
+            bs_buf_byte_idx++;
+            if (bs_buf_byte_idx > bs_buf_size - 1) {
+                av_log(NULL, AV_LOG_ERROR, "SAM: bitstream buffer overflow!\n");
+            }
+        }
+        j -= k;
+    }
+    return N;
+}
+
+
+static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
+        int frameLength, int maxSfb, int maxScalefactors[],
+        int scf_model0[], int scf_model1[], int max_sfb_si_len[], int swb_offset[][52],
+        int used_bits, int sample_buf[][1024], int scalefactors[][MAX_SCFAC_BANDS], GetBitContext *gb) {
 
     int i, ch, g, k;
     int qband, cband;
@@ -1765,28 +1768,25 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
     int stereo_si_coded[MAX_SCFAC_BANDS];
     int dscale_bits[MAX_LAYER];
     int flen;
-    int max_pns_energy[2];
-    int pns_pcm_flag[2] = { 1, 1 };
     long avail_bit_len;
-
+    int enc_top_layer = enc_top_layer;
+    int nch = nch;
 
     if (target > enc_top_layer)
         target = enc_top_layer;
-    /* ***************************************************** */
-    /*                  Initialize variables                 */
-    /* ***************************************************** */
+
     for (ch = 0; ch < nch; ch++) {
         int s;
 
         s = 0;
-        for (g = 0; g < num_window_groups; g++) {
+        for (g = 0; g < bsac->num_window_groups; g++) {
             sample[ch][g] = &(sample_buf[ch][1024 * s / 8]);
             sign_is_coded[ch][g] = &(sign_is_coded_buf[ch][1024 * s / 8]);
             coded_samp_bit[ch][g] = &(coded_samp_bit_buf[ch][1024 * s / 8]);
             enc_sign_vec[ch][g] = &(enc_sign_vec_buf[ch][(1024 * s / 8) / 4]);
             enc_vec[ch][g] = &(enc_vec_buf[ch][(1024 * s / 8) / 4]);
             cur_snf[ch][g] = &(cur_snf_buf[ch][1024 * s / 8]);
-            s += window_group_length[g];
+            s += bsac->window_group_length[g];
             for (i = 0; i < MAX_SCFAC_BANDS; i++)
                 scalefactors[ch][g * maxSfb + i] = 0;
             for (i = 0; i < 32; i++) {
@@ -1812,7 +1812,7 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
         stereo_si_coded[i] = 0;
 
     layer_sfb[0] = 0;
-    for (g = 0; g < num_window_groups; g++) {
+    for (g = 0; g < bsac->num_window_groups; g++) {
         layer_cband[g][0] = 0;
         layer_index[g][0] = 0;
     }
@@ -1831,31 +1831,18 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
         used_bits += k;
     }
 
-    /* Initialize
-     layer_max_freq
-     layer_max_cband
-     layer_max_qband
-     layer_bit_flush
-     */
+
     slayer_size = bsac_init_layer_data(ac, gb);
 
     for (i = 0; i <= enc_top_layer; i++)
         dscale_bits[i] = sam_scale_bits_dec[i] * nch;
 
-    /* ##################################################### */
-    /*                   BSAC MAIN ROUTINE                    */
-    /* ##################################################### */
 
-    /* ***************************************************** */
-    /*                  BSAC_layer_stream()                  */
-    /* ***************************************************** */
-
-    /* calculate layer buffer position */
     for (layer = 0; layer < (enc_top_layer + slayer_size); layer++)
         layer_si_maxlen[layer] = 0;
 
     for (ch = 0; ch < nch; ch++) {
-        for (g = 0; g < num_window_groups; g++) {
+        for (g = 0; g < bsac->num_window_groups; g++) {
             end_cband[ch][g] = end_qband[ch][g] = 0;
         }
     }
@@ -1869,51 +1856,49 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
             end_cband[ch][g] = layer_max_cband[layer];
         }
 
-        for(ch = 0; ch < nch; ch++) {
-            /* coding band side infomation  */
+        for (ch = 0; ch < nch; ch++) {
             for (cband = start_cband[ch][g]; cband < end_cband[ch][g]; cband++) {
                 if (cband <= 0)
                     layer_si_maxlen[layer] += 11;
                 else
-                    layer_si_maxlen[layer] += max_cband_si_len_tbl[cband_si_type[ch]];
+                    layer_si_maxlen[layer]
+                            += max_cband_si_len_tbl[bsac->cband_si_type[ch]];
             }
 
-            /* side infomation : scalefactor */
-            for(qband = start_qband[ch][g]; qband < end_qband[ch][g]; qband++) {
+            for (qband = start_qband[ch][g]; qband < end_qband[ch][g]; qband++) {
                 layer_si_maxlen[layer] += max_sfb_si_len[ch] + 5;
             }
         }
     }
 
     flen = frameLength;
-    if(flen < dscale_bits[enc_top_layer]) {
+    if (flen < dscale_bits[enc_top_layer]) {
         flen = dscale_bits[enc_top_layer];
     }
 
-    for (layer=enc_top_layer+slayer_size; layer< MAX_LAYER; layer++) {
+    for (layer = enc_top_layer + slayer_size; layer < MAX_LAYER; layer++) {
         layer_buf_offset[layer] = flen;
     }
 
-    si_offset = flen - layer_si_maxlen[enc_top_layer+slayer_size-1];
-    /* 2000. 08. 22. enc_top_layer -> enc_top_layer+slayer_size-1. SHPARK */
+    si_offset = flen - layer_si_maxlen[enc_top_layer + slayer_size - 1];
 
-    for (layer=(enc_top_layer+slayer_size-1); layer>=slayer_size; layer--) {
-        if ( si_offset < dscale_bits[layer-slayer_size] )
+    for (layer = (enc_top_layer + slayer_size - 1); layer >= slayer_size; layer--) {
+        if (si_offset < dscale_bits[layer - slayer_size])
             layer_buf_offset[layer] = si_offset;
         else
-            layer_buf_offset[layer] = dscale_bits[layer-slayer_size];
-        si_offset = layer_buf_offset[layer] - layer_si_maxlen[layer-1];
+            layer_buf_offset[layer] = dscale_bits[layer - slayer_size];
+        si_offset = layer_buf_offset[layer] - layer_si_maxlen[layer - 1];
     }
-    for (; layer>0; layer--) {
+    for (; layer > 0; layer--) {
         layer_buf_offset[layer] = si_offset;
-        si_offset = layer_buf_offset[layer] - layer_si_maxlen[layer-1];
+        si_offset = layer_buf_offset[layer] - layer_si_maxlen[layer - 1];
     }
     layer_buf_offset[0] = used_bits;
 
     if (used_bits > si_offset) {
         si_offset = used_bits - si_offset;
-        for (layer=(enc_top_layer+slayer_size-1); layer>=slayer_size; layer--) {
-            cw_len  = layer_buf_offset[layer+1] - layer_buf_offset[layer];
+        for (layer = (enc_top_layer + slayer_size - 1); layer >= slayer_size; layer--) {
+            cw_len = layer_buf_offset[layer + 1] - layer_buf_offset[layer];
             cw_len -= layer_si_maxlen[layer];
             if (cw_len >= si_offset) {
                 cw_len = si_offset;
@@ -1921,106 +1906,110 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
             } else
                 si_offset -= cw_len;
 
-            for (i=1; i<=layer; i++)
+            for (i = 1; i <= layer; i++)
                 layer_buf_offset[i] += cw_len;
 
-            if (si_offset==0) break;
+            if (si_offset == 0)
+                break;
         }
     } else {
         si_offset = si_offset - used_bits;
         for (layer = 1; layer < slayer_size; layer++) {
-            layer_buf_offset[layer] = layer_buf_offset[layer-1] + layer_si_maxlen[layer-1] + si_offset/slayer_size;
-            if ( layer <= (si_offset%slayer_size) )
+            layer_buf_offset[layer] = layer_buf_offset[layer - 1]
+                    + layer_si_maxlen[layer - 1] + si_offset / slayer_size;
+            if (layer <= (si_offset % slayer_size))
                 layer_buf_offset[layer]++;
         }
     }
 
-    /* added by shpark. 2001. 02. 15 */
-    for (layer=enc_top_layer+slayer_size-1; layer>=0; layer--) {
+    for (layer = enc_top_layer + slayer_size - 1; layer >= 0; layer--) {
         if (layer_buf_offset[layer] > frameLength)
             layer_buf_offset[layer] = frameLength;
         else
             break;
     }
 
-    avail_bit_len = get_bits_count(gb) / 8 * 8;
+    avail_bit_len = (gb->size_in_bits - gb->index) / 8 * 8;
 
-    for (layer=target+slayer_size-1; layer>=0; layer--) {
+    for (layer = target + slayer_size - 1; layer >= 0; layer--) {
         if (layer_buf_offset[layer] > avail_bit_len)
             target--;
         else
             break;
     }
 
-    /* ********************************************************* */
-    /*       Split Input Bitstream into Layer Bitstreams        */
-    /* ********************************************************* */
     sam_init_layer_buf();
 
     sam_setRBitBufPos(used_bits);
 
-    if(sba_mode) {
-        int  total_layer;
+    if (bsac->sba_mode) {
+        int total_layer;
 
         total_layer = enc_top_layer + slayer_size;
         total_layer = target + slayer_size;
-        for(layer = 0; layer < total_layer; layer++) {
+        for (layer = 0; layer < total_layer; layer++) {
             unsigned data;
             layer_cw_offset[layer] = sam_getRBitBufPos();
-            cw_len = layer_buf_offset[layer+1] - layer_buf_offset[layer];
+            cw_len = layer_buf_offset[layer + 1] - layer_buf_offset[layer];
 
-            while(cw_len > 0) {
+            while (cw_len > 0) {
                 int len;
 
-                if (get_bits_count(gb)>=frameLength) break;
+                if (get_bits_count(gb) >= frameLength)
+                    break;
                 len = (cw_len > 8) ? 8 : cw_len;
                 data = get_bits(gb, len);
                 sam_putbits2buf(data, len);
                 cw_len -= len;
             }
-            while(cw_len > 0) {
+            while (cw_len > 0) {
                 sam_putbits2buf(0, 8);
                 cw_len -= 8;
             }
-            if(layer_bit_flush[layer])
+            if (layer_bit_flush[layer])
                 sam_putbits2buf(0x00, 32);
         }
     } else {
         unsigned data;
 
         cw_len = avail_bit_len - used_bits;
-        while(cw_len > 0) {
+        while (cw_len > 0) {
             int len;
 
-            if (get_bits_count(gb)>=avail_bit_len) break;
+            if (get_bits_count(gb) >= avail_bit_len)
+                break;
             len = (cw_len > 8) ? 8 : cw_len;
             data = get_bits(gb, len);
             sam_putbits2buf(data, len);
             cw_len -= len;
         }
-        while(cw_len > 0) {
+        while (cw_len > 0) {
             sam_putbits2buf(0, 8);
             cw_len -= 8;
         }
         sam_putbits2buf(0x00, 32);
     }
 
-    for(i = 0; i < MAX_LAYER; i++) {
+    for (i = 0; i < MAX_LAYER; i++) {
         layer_extra_len[i] = 0;
     }
 
-    for(ch = 0; ch < nch; ch++) {
-        for(g = 0; g < num_window_groups; g++) {
-            start_qband[ch][g] = 0;;
-            start_cband[ch][g] = 0;;
+    for (ch = 0; ch < nch; ch++) {
+        for (g = 0; g < bsac->num_window_groups; g++) {
+            start_qband[ch][g] = 0;
+            ;
+            start_cband[ch][g] = 0;
+            ;
             start_freq[ch][g] = 0;
-            end_qband[ch][g] = 0;;
-            end_cband[ch][g] = 0;;
+            end_qband[ch][g] = 0;
+            ;
+            end_cband[ch][g] = 0;
+            ;
             end_freq[ch][g] = 0;
         }
     }
 
-    if (!sba_mode) {
+    if (!bsac->sba_mode) {
         bsac_init_ArDecode(bsac, 0);
         bsac_set_ArDecode(bsac, 0);
         sam_setRBitBufPos(used_bits);
@@ -2028,11 +2017,11 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
     }
 
     for (ch = 0; ch < nch; ch++) {
-        for (g = 0; g < num_window_groups; g++)
+        for (g = 0; g < bsac->num_window_groups; g++)
             s_freq[ch][g] = 0;
     }
 
-    if (windowSequence == 2) {
+    if (bsac->windowSequence == 2) {
         for (layer = 0; layer < slayer_size; layer++) {
             for (ch = 0; ch < nch; ch++) {
                 g = layer_reg[layer];
@@ -2057,7 +2046,7 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
             end_freq[ch][g] = layer_max_freq[layer];
         }
 
-        if (windowSequence == 2) {
+        if (bsac->windowSequence == 2) {
             if (layer >= slayer_size) {
                 for (ch = 0; ch < nch; ch++) {
                     g = layer_reg[layer];
@@ -2073,7 +2062,7 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
             }
         }
 
-        if (sba_mode) {
+        if (bsac->sba_mode) {
             if (layer == 0 || layer_bit_flush[layer - 1]) {
                 bsac_init_ArDecode(bsac, layer);
                 bsac_set_ArDecode(bsac, layer);
@@ -2100,9 +2089,8 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
             continue;
         }
 
-        /* coding band side infomation  */
-        cw_len = decode_bsac_cband_si(bsac, ModelIndex, cband_si_type, start_cband,
-                end_cband, g, gb);
+        cw_len = decode_bsac_cband_si(bsac, ModelIndex, bsac->cband_si_type,
+                start_cband, end_cband, g, gb);
         for (ch = 0; ch < nch; ch++) {
             g = layer_reg[layer];
             for (cband = start_cband[ch][g]; cband < end_cband[ch][g]; cband++) {
@@ -2119,52 +2107,45 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
         g = layer_reg[layer];
         available_len -= cw_len;
 
-        /* side infomation : scalefactor */
         if (layer < slayer_size)
             scf_model = (int *) scf_model0;
         else
             scf_model = (int *) scf_model1;
-        cw_len = decode_bsac_scfband_si(bsac, scalefactors,
-                scf_model, maxSfb, stereo_si_coded, g, gb);
+        cw_len = decode_bsac_scfband_si(bsac, scalefactors, scf_model, maxSfb,
+                stereo_si_coded, g, gb);
 
         available_len -= cw_len;
 
-        min_snf = layer < slayer_size ? base_snf : 1;
+        min_snf = layer < slayer_size ? bsac->base_snf_thr : 1;
 
-        /* Bit-Sliced Spectral Data Coding */
-        cw_len = decode_bsac_spectra(bsac, sample, g, g + 1, start_freq, end_freq,
-                min_snf, available_len, ModelIndex, cur_snf, coded_samp_bit,
-                sign_is_coded, enc_sign_vec, enc_vec, gb);
+        cw_len = decode_bsac_spectra(bsac, sample, g, g + 1, start_freq,
+                end_freq, min_snf, available_len, ModelIndex, cur_snf,
+                coded_samp_bit, sign_is_coded, enc_sign_vec, enc_vec, gb);
 
         available_len -= cw_len;
 
-        if (sba_mode && layer_bit_flush[layer] && available_len > 0) {
+        if (bsac->sba_mode && layer_bit_flush[layer] && available_len > 0) {
             layer_extra_len[layer] = available_len;
             bsac_store_ArDecode(bsac, layer);
             layer_cw_offset[layer] = sam_getRBitBufPos();
         }
-        if (!sba_mode && available_len > 0) {
-            cw_len = decode_bsac_spectra(bsac, sample, 0, num_window_groups, s_freq,
-                    e_freq, 1, available_len, ModelIndex, cur_snf,
-                    coded_samp_bit, sign_is_coded, enc_sign_vec, enc_vec,
-                    gb);
+        if (!bsac->sba_mode && available_len > 0) {
+            cw_len = decode_bsac_spectra(bsac, sample, 0, bsac->num_window_groups,
+                    s_freq, e_freq, 1, available_len, ModelIndex, cur_snf,
+                    coded_samp_bit, sign_is_coded, enc_sign_vec, enc_vec, gb);
             available_len -= cw_len;
         }
-    } /* for (layer = 0; layer <= top_layer; layer++) */
-    if (!sba_mode)
+    }
+    if (!bsac->sba_mode)
         layer_extra_len[enc_top_layer + slayer_size - 1] = frameLength;
 
-
-    /* ***************************************************** */
-    /*         Extra Encoding Process  for each layer        */
-    /* ***************************************************** */
     for (ch = 0; ch < nch; ch++) {
-        for (g = 0; g < num_window_groups; g++) {
+        for (g = 0; g < bsac->num_window_groups; g++) {
             start_freq[ch][g] = 0;
         }
     }
 
-    if (windowSequence == 2) {
+    if (bsac->windowSequence == 2) {
         for (layer = 0; layer < slayer_size; layer++) {
             for (ch = 0; ch < nch; ch++) {
                 g = layer_reg[layer];
@@ -2173,10 +2154,10 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
         }
     }
 
-    if (sba_mode) {
+    if (bsac->sba_mode) {
         for (layer = 0; layer < target + slayer_size; layer++) {
             available_len = layer_extra_len[layer];
-            if (windowSequence == 2) {
+            if (bsac->windowSequence == 2) {
                 if (layer >= slayer_size) {
                     for (ch = 0; ch < nch; ch++) {
                         g = layer_reg[layer];
@@ -2194,22 +2175,20 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
             if (available_len <= 0)
                 continue;
 
-            if (sba_mode) {
+            if (bsac->sba_mode) {
                 bsac_set_ArDecode(bsac, layer);
                 sam_setRBitBufPos(layer_cw_offset[layer]);
             }
 
-            /* Extra Bit-Sliced Spectral Data Coding */
-            cw_len = decode_bsac_spectra(bsac, sample, 0, num_window_groups, start_freq,
-                    e_freq, 1, available_len, ModelIndex, cur_snf,
-                    coded_samp_bit, sign_is_coded, enc_sign_vec, enc_vec,
-                    gb);
+            cw_len = decode_bsac_spectra(bsac, sample, 0, bsac->num_window_groups,
+                    start_freq, e_freq, 1, available_len, ModelIndex, cur_snf,
+                    coded_samp_bit, sign_is_coded, enc_sign_vec, enc_vec, gb);
 
             available_len -= cw_len;
 
-            if (windowSequence == 2) {
+            if (bsac->windowSequence == 2) {
                 for (ch = 0; ch < nch; ch++) {
-                    for (g = 0; g < num_window_groups; g++) {
+                    for (g = 0; g < bsac->num_window_groups; g++) {
                         s_freq[ch][g] = e_freq[ch][g];
                     }
                 }
@@ -2223,10 +2202,10 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
                     s_freq[ch][g] = e_freq[ch][g];
                     e_freq[ch][g] = layer_max_freq[k];
                 }
-                cw_len = decode_bsac_spectra(bsac, sample, 0, num_window_groups, s_freq,
-                        e_freq, 1, available_len, ModelIndex, cur_snf,
-                        coded_samp_bit, sign_is_coded, enc_sign_vec, enc_vec,
-                        gb);
+                cw_len = decode_bsac_spectra(bsac, sample, 0, bsac->num_window_groups,
+                        s_freq, e_freq, 1, available_len,
+                        ModelIndex, cur_snf, coded_samp_bit, sign_is_coded,
+                        enc_sign_vec, enc_vec, gb);
                 available_len -= cw_len;
             }
         }
@@ -2234,7 +2213,312 @@ static int sam_decode_bsac_stream(AACContext *ac, BSAC *bsac, int target, int fr
     return 0;
 }
 
+static void decode_bsac_data(AACContext *ac, BSAC *bsac, int target,
+        int frameLength, int maxSfb,
+        int max_scalefactor[], int scf_model0[],
+        int scf_model1[], int max_sfb_si_len[],
+        int used_bits, int samples[][1024],
+        int scalefactors[][MAX_SCFAC_BANDS], GetBitContext *gb) {
+    int b, w, i;
+    int sfb;
+    int top_band = bsac->long_sfb_top;
+    int swb_offset[8][52];
+    int sample_buf[2][1024];
 
+    target = (target - 16);
+
+    if (bsac->windowSequence == EIGHT_SHORT_SEQUENCE) {
+        b = 1;
+        for (w = 0; w < bsac->num_window_groups; w++, b++) {
+            swb_offset[w][0] = 0;
+            for (sfb = 0; sfb < bsac->short_sfb_top; sfb++) {
+                swb_offset[w][sfb + 1] = swb_offset_short[sfb + 1]
+                        * bsac->window_group_length[w];
+            }
+        }
+        top_band = bsac->short_sfb_top;
+    } else {
+        swb_offset[0][0] = 0;
+        for (sfb = 0; sfb < bsac->long_sfb_top + 1; sfb++)
+            swb_offset[0][sfb + 1] = swb_offset_long[sfb + 1];
+        top_band = bsac->long_sfb_top;
+    }
+
+    decode_bsac_stream(ac, bsac, target, frameLength,
+    maxSfb, max_scalefactor, scf_model0, scf_model1, max_sfb_si_len,
+    swb_offset, used_bits, sample_buf, scalefactors, gb);
+
+    if (bsac->windowSequence == EIGHT_SHORT_SEQUENCE) {
+        int offset, b, s, k;
+        s = 0;
+        for (w = 0; w < bsac->num_window_groups; w++) {
+            for (i = 0; i < 128; i += 4) {
+                offset = (128 * s) + (i * bsac->window_group_length[w]);
+                for (k = 0; k < 4; k++)
+                    for (b = 0; b < bsac->window_group_length[w]; b++) {
+                        samples[0][128 * (b + s) + i + k]
+                                = sample_buf[0][offset + 4 * b + k];
+                        samples[1][128 * (b + s) + i + k]
+                                = sample_buf[1][offset + 4 * b + k];
+                    }
+            }
+            s += bsac->window_group_length[w];
+        }
+    } else {
+        for (i = 0; i < 1024; i++) {
+            samples[0][i] = sample_buf[0][i];
+            samples[1][i] = sample_buf[1][i];
+        }
+    }
+}
+
+
+
+static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
+        double **coef, int *window_Sequence,
+        int *window_Shape, int nch, GetBitContext *gb) {
+    int i, ch, b;
+    int usedBits;
+    int header_length;
+    int sba_mode;
+    int top_layer;
+    int base_snf_thr;
+    int base_band;
+    int max_scalefactor[2];
+    int scf_model0[2];
+    int scf_model1[2];
+    int cband_si_type[2];
+    int max_sfb_si_len[2];
+
+    int maxSfb;
+    int groupInfo[7];
+    int num_window_groups, window_group_length[8];
+    int stereo_mode;
+    int is_intensity;
+    int ms_mask[MAX_SCFAC_BANDS + 1];
+    int ltp_data_present[2];
+    int scalefactors[2][MAX_SCFAC_BANDS];
+    int pns_data_present;
+    int pns_sfb_start = 63;
+    int used_bits = 0;
+    int ics_reserved;
+    int frameLength;
+    TemporalNoiseShaping tns[2];
+    double spectrums[2][1024];
+    int samples[2][1024];
+
+
+    for (i = 0; i < MAX_SCFAC_BANDS; i++) {
+        bsac->ms_mask[i] = 0;
+        bsac->is_mask[i] = 0;
+        bsac->pns->sfb_flag[0][i] = 0;
+        bsac->pns->sfb_flag[1][i] = 0;
+        bsac->pns->sfb_mode[i] = 0;
+    }
+
+    bsac->ms_present = 0;
+    bsac->is_intensity = 0;
+
+    frameLength = get_bits(gb, 11) * 8;
+
+    header_length = get_bits(gb, 4);
+    sba_mode = get_bits1(gb);
+    top_layer = get_bits(gb, 6);
+    base_snf_thr = get_bits(gb, 2) + 1;
+
+    for (ch = 0; ch < nch; ch++)
+        max_scalefactor[ch] = get_bits(gb, 8);
+
+    base_band = get_bits(gb, 5);
+
+    for (ch = 0; ch < nch; ch++) {
+        cband_si_type[ch] = get_bits(gb, 5);
+        scf_model0[ch] = get_bits(gb, 3);
+        scf_model1[ch] = get_bits(gb, 3);
+        max_sfb_si_len[ch] = get_bits(gb, 4);
+    }
+
+    ics_reserved = get_bits1(gb);
+    *window_Sequence = get_bits(gb, 2);
+    *window_Shape = get_bits1(gb);
+
+    if (*window_Sequence == EIGHT_SHORT_SEQUENCE) {
+        maxSfb = get_bits(gb, 4);
+        for (i = 0; i < 7; i++)
+            groupInfo[i] = get_bits1(gb);
+    } else {
+        maxSfb = get_bits(gb, 6);
+    }
+
+    num_window_groups = 1;
+    window_group_length[0] = 1;
+    if (*window_Sequence == 2) {
+        for (b = 0; b < 7; b++) {
+            if (groupInfo[b] == 0) {
+                window_group_length[num_window_groups] = 1;
+                num_window_groups++;
+            } else {
+                window_group_length[num_window_groups - 1]++;
+            }
+        }
+    }
+
+    pns_data_present = get_bits1(gb);
+    if (pns_data_present)
+        pns_sfb_start = get_bits(gb, 6);
+
+    if (nch == 2) {
+        stereo_mode = get_bits(gb, 2);
+        if (stereo_mode == 1) {
+            ms_mask[0] = 1;
+        } else if (stereo_mode == 2) {
+            ms_mask[0] = 2;
+            for (i = 0; i < MAX_SCFAC_BANDS; i++)
+                ms_mask[i + 1] = 1;
+        } else if (stereo_mode == 3) {
+            ms_mask[0] = 1;
+            is_intensity = 1;
+        }
+    }
+
+    for (ch = 0; ch < nch; ch++) {
+        tns[ch].present = get_bits(gb, 1);
+        if (tns[ch].present) {
+            /* tns decoding: modified decode_tns() */
+        }
+
+        ltp_data_present[ch] = get_bits(gb, 1);
+    }
+
+    if (nch == 2) {
+        window_Sequence[1] = window_Sequence[0];
+        window_Shape[1] = window_Shape[0];
+    }
+
+    used_bits = get_bits_count(gb);
+
+    if (target_br == 0)
+        target_br = top_layer + 16;
+
+    decode_bsac_data(ac, bsac, target_br, frameLength, maxSfb, max_scalefactor,
+            scf_model0, scf_model1, max_sfb_si_len, used_bits, samples, scalefactors, gb);
+
+    for (ch = 0; ch < nch; ch++) {
+        bsac_dequantization(bsac, target_br, scalefactors[ch],
+                samples[ch], maxSfb,
+                spectrums[ch], ch, gb);
+    }
+
+    if (ms_mask[0]) {
+        /* modified apply_mid_side_stereo() */
+    }
+
+    if (pns_data_present) {
+        /* pns() */
+    }
+
+    if (nch == 2 && is_intensity) {
+        /* modified apply_intensity_stereo() */
+    }
+
+    for (ch = 0; ch < nch; ch++) {
+        if (tns[ch].present) {
+            /* TNS decoding: modified apply_tns() */
+        }
+
+        for (i = 0; i < 1024; i++)
+            coef[ch][i] = (double) spectrums[ch][i];
+    }
+
+    usedBits = get_bits_count(gb);
+    frameLength = (gb->size_in_bits - gb->index) / 8 * 8;
+
+    while (usedBits < frameLength) {
+        int remain, read_bits;
+
+
+
+        remain = frameLength - usedBits;
+        read_bits = remain > 8 ? 8 : remain;
+        i = get_bits(gb, read_bits);
+        usedBits = get_bits_count(gb);
+    }
+
+    return usedBits;
+}
+
+
+static void sam_scale_bits_init(AACContext *ac, int sampling_rate_decoded, int block_size_samples)
+{
+    int layer, layer_bit_rate;
+    int average_layer_bits;
+    static int init_pns_noise_nrg_model = 1;
+
+    for (layer = 0; layer < MAX_LAYER; layer++) {
+        layer_bit_rate = (layer + 16) * 1000;
+        average_layer_bits = (int) ((double) layer_bit_rate
+                * (double) block_size_samples / (double) sampling_rate_decoded);
+        sam_scale_bits_dec[layer] = (average_layer_bits / 8) * 8;
+    }
+    ac->m4ac.sampling_index = sampling_rate_decoded;
+    if (init_pns_noise_nrg_model) {
+        int i;
+
+        AModelNoiseNrg[0] = 16384 - 32;
+        for (i = 1; i < 512; i++)
+            AModelNoiseNrg[i] = AModelNoiseNrg[i - 1] - 32;
+        init_pns_noise_nrg_model = 0;
+    }
+}
+
+
+
+static void bsac_decode_init(AACContext *ac, int sampling_rate_decoded, int block_size_samples)
+{
+    int i;
+    int long_block_size, short_block_size;
+    int fs_idx;
+    BSAC *bsac = ac->bsac;
+
+    for (i = 0; i < 128; i++)
+        sam_exptable[i] = (double) pow((double) 2.0, (double) (0.25 * i));
+
+    for (i = 0; i < 128; i++)
+        sam_iq_exp_tbl[i] = (double) pow((double) i, (double) 4. / 3.);
+
+    sam_scale_bits_init(ac, sampling_rate_decoded, block_size_samples);
+
+    long_block_size = block_size_samples;
+    short_block_size = long_block_size / 8;
+
+    fs_idx = 3;
+    for (i = 0; i < 16; i++) {
+        if (sampling_rate_decoded == samp_rate_info[i].samp_rate) {
+            fs_idx = i;
+            break;
+        }
+    }
+
+    if (block_size_samples == 1024) {
+        bsac->long_sfb_top = samp_rate_info[fs_idx].nsfb1024;
+        bsac->short_sfb_top = samp_rate_info[fs_idx].nsfb128;
+        swb_offset_long[0] = 0;
+        for (i = 0; i < bsac->long_sfb_top; i++)
+            swb_offset_long[i + 1] = samp_rate_info[fs_idx].SFbands1024[i];
+        swb_offset_short[0] = 0;
+        for (i = 0; i < bsac->short_sfb_top; i++)
+            swb_offset_short[i + 1] = samp_rate_info[fs_idx].SFbands128[i];
+    } else if (block_size_samples == 960) {
+        bsac->long_sfb_top = samp_rate_info[fs_idx].nsfb960;
+        bsac->short_sfb_top = samp_rate_info[fs_idx].nsfb120;
+        swb_offset_long[0] = 0;
+        for (i = 0; i < bsac->long_sfb_top; i++)
+            swb_offset_long[i + 1] = samp_rate_info[fs_idx].SFbands960[i];
+        swb_offset_short[0] = 0;
+        for (i = 0; i < bsac->short_sfb_top; i++)
+            swb_offset_short[i + 1] = samp_rate_info[fs_idx].SFbands120[i];
+    }
+}
 
 
 

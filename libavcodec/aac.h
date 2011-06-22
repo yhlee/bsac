@@ -271,6 +271,8 @@ typedef struct {
     TemporalNoiseShaping *tns[2];
     LongTermPrediction   *ltp[2];
     PerceptualNoise      *pns;
+    int long_sfb_top;
+    int short_sfb_top;
     int start_sfb[2][8];
     int end_sfb[2][8];
     int sba_mode;
