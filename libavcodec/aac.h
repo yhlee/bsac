@@ -271,6 +271,7 @@ typedef struct {
     TemporalNoiseShaping *tns[2];
     LongTermPrediction   *ltp[2];
     PerceptualNoise      *pns;
+    ChannelElement che;
     int long_sfb_top;
     int short_sfb_top;
     int start_sfb[2][8];
@@ -278,7 +279,8 @@ typedef struct {
     int sba_mode;
     int cband_si_type[2];
     int nch;
-    int windowSequence;
+    int windowSequence[2];
+    int use_kb_window[2];
     int num_window_groups;
     int window_group_length[8];
     int numOfSubFrame;
