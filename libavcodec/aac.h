@@ -271,7 +271,7 @@ typedef struct {
     TemporalNoiseShaping *tns[2];
     LongTermPrediction   *ltp[2];
     PerceptualNoise      *pns;
-    ChannelElement che;
+    ChannelElement *che;
     int long_sfb_top;
     int short_sfb_top;
     int start_sfb[2][8];
@@ -290,10 +290,12 @@ typedef struct {
     int top_layer;
     int base_snf_thr;
     int base_band;
-    int max_sfb[2];
+    int max_scalefactor[2];
     int base_scf_model[2];
     int enh_scf_model[2];
     int max_sfb_si_len[2];
+    int scf_model0[2];
+    int scf_model1[2];
     // MS specific
     int     ms_present;
     uint8_t ms_mask[128];
