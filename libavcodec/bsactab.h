@@ -51,6 +51,7 @@ typedef struct {
   short*  SFbands512;
 } SR_Info;
 
+extern uint64_t half[16];
 extern int AModelScf[8][64];
 extern int AModelCBand[8][32];
 extern int AModelSpectrum[1016];
