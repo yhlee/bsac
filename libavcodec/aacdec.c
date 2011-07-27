@@ -1863,10 +1863,10 @@ static float bsac_iquant_exp(int q)
 
 
 static void bsac_dequantization(BSAC *bsac,
-		                          int target,
-		                          int samples[],
-		                          int ch,
-		                          GetBitContext *gb)
+                                  int target,
+                                  int samples[],
+                                  int ch,
+                                  GetBitContext *gb)
 {
     int sfb, i, k;
     int *scalefactors = bsac->che->ch[ch].sf_idx;
@@ -1882,7 +1882,7 @@ static void bsac_dequantization(BSAC *bsac,
     if(bsac->windowSequence[0] != EIGHT_SHORT_SEQUENCE) {
         for(sfb = 0; sfb < maxSfb; sfb++) {
             if(ch == 1 && bsac->is_mask[sfb])
-            	continue;
+                continue;
             scale = bsac_calc_scale(scalefactors[sfb] - 100);
             for(i = swb_offset_long[sfb]; i < swb_offset_long[sfb + 1]; i++) {
                 decSpectrum[i] = bsac_iquant_exp(samples[i]) * scale;
@@ -1895,7 +1895,7 @@ static void bsac_dequantization(BSAC *bsac,
         for(w = 0; w < bsac->num_window_groups; w++) {
             for(sfb = 0; sfb < maxSfb; sfb++) {
                 if(ch == 1 && bsac->is_mask[(w * maxSfb) + sfb])
-                	continue;
+                    continue;
                 scale = bsac_calc_scale(scalefactors[w * maxSfb + sfb] - 100);
                 for (b = 0; b < bsac->window_group_length[w]; b++) {
                     k = (s + b) * 128;
