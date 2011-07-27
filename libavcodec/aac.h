@@ -147,9 +147,9 @@ typedef struct {
 typedef struct {
     uint8_t max_sfb;            ///< number of scalefactor bands per group
     enum WindowSequence window_sequence[2];
-    uint8_t use_kb_window[2];   ///< If set, use Kaiser-Bessel window, otherwise use a sinus window.
+    int use_kb_window[2];   ///< If set, use Kaiser-Bessel window, otherwise use a sinus window.
     int num_window_groups;
-    uint8_t group_len[8];
+    int group_len[8];
     LongTermPrediction ltp;
     const uint16_t *swb_offset; ///< table of offsets to the lowest spectral coefficient of a scalefactor band, sfb, for a particular window
     const uint8_t *swb_sizes;   ///< table of scalefactor band sizes for a particular window
@@ -290,6 +290,7 @@ typedef struct {
     int top_layer;
     int base_snf_thr;
     int base_band;
+    int top_band;
     int max_scalefactor[2];
     int base_scf_model[2];
     int enh_scf_model[2];
