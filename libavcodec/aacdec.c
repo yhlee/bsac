@@ -1169,6 +1169,7 @@ static int bsac_decode_symbol(BSAC *bsac, int *cum_freq, int *symbol,
 
     av_log(NULL, AV_LOG_ERROR, "bsac->cw_len %d!\n", bsac->cw_len);
     av_log(NULL, AV_LOG_ERROR, "bsac->range %d!\n", bsac->range);
+    av_log(NULL, AV_LOG_ERROR, "bsac->value %d!\n", bsac->value);
     for (bsac->cw_len = 0; bsac->range < bsac->half[bsac->cw_len]; bsac->cw_len++)
         ;
 
@@ -1204,6 +1205,8 @@ static int bsac_decode_symbol2(BSAC *bsac, int freq0, int *symbol,
 
 
 static int decode_bsac_scfband_si(BSAC *bsac,
+    int start_sfb[][8],
+    int end_sfb[][8],
     int scf_model[],
     int maxSfb, //bsac
     int stereo_si_coded[],
@@ -1218,7 +1221,7 @@ static int decode_bsac_scfband_si(BSAC *bsac,
 
     si_cw_len = 0;
     for(ch = 0; ch < bsac->nch; ch++) {
-        for(sfb = bsac->start_sfb[ch][g]; sfb < bsac->end_sfb[ch][g]; sfb++) {
+        for(sfb = start_sfb[ch][g]; sfb < end_sfb[ch][g]; sfb++) {
             if(bsac->nch == 1) {
                 if(bsac->pns->present && sfb >= bsac->pns->start_sfb) {
                     si_cw_len += bsac_decode_symbol(bsac, AModelNoiseFlag, &m, gb);
@@ -2348,7 +2351,8 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
         else
             scf_model = (int *) bsac->scf_model1;
 
-        cw_len = decode_bsac_scfband_si(bsac, scf_model, maxSfb,
+        av_log(NULL, AV_LOG_ERROR, "scf_model! %d\n", scf_model[0]);
+        cw_len = decode_bsac_scfband_si(bsac, start_qband, end_qband, scf_model, maxSfb,
                 stereo_si_coded, g, gb);
 
         av_log(NULL, AV_LOG_ERROR, "decode_bsac_scfband_si cw_len %d\n", cw_len);

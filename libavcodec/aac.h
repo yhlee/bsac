@@ -274,8 +274,6 @@ typedef struct {
     ChannelElement *che;
     int long_sfb_top;
     int short_sfb_top;
-    int start_sfb[2][8];
-    int end_sfb[2][8];
     int sba_mode;
     int cband_si_type[2];
     int nch;
