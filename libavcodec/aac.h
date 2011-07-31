@@ -279,10 +279,6 @@ typedef struct {
     int sba_mode;
     int cband_si_type[2];
     int nch;
-    int windowSequence[2];
-    int use_kb_window[2];
-    int num_window_groups;
-    int window_group_length[8];
     int numOfSubFrame;
     int layer_length;
     int frameLength;
