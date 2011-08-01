@@ -1612,36 +1612,6 @@ static int bsac_initialize_layer_data(AACContext *ac,
 
           return slayer_size;
       }
-/**
- * Decode bsac header; reference: table 4.35.
- */
-static int decode_bsac_header(BSAC *bsac, GetBitContext *gb)
-{
-    int i;
-
-
-    bsac->frameLength   = get_bits(gb, 11) << 3;
-    bsac->header_length = get_bits(gb,  4);
-    bsac->sba_mode      = get_bits(gb,  1);
-    bsac->top_layer     = get_bits(gb,  6);
-    bsac->base_snf_thr  = get_bits(gb,  2) + 1;
-
-    for (i = 0; i < bsac->nch; i++)
-        bsac->max_scalefactor[i] = get_bits(gb, 8);
-
-    bsac->base_band = get_bits(gb, 5);
-
-    for (i = 0; i < bsac->nch; i++) {
-        bsac->cband_si_type[i]  = get_bits(gb, 5);
-        bsac->base_scf_model[i] = get_bits(gb, 3);
-        bsac->enh_scf_model[i]  = get_bits(gb, 3);
-        bsac->max_sfb_si_len[i] = get_bits(gb, 4);
-    }
-
-    return 0;
-}
-
-
 
 
 
@@ -1724,6 +1694,8 @@ static int decode_bsac_spectra(BSAC *bsac,
                         k = bsac_decode_symbol2(bsac, freq, &m, gb);
                         cw_len -= k;
 
+                        av_log(NULL, AV_LOG_ERROR, "bsac->range %d!\n", bsac->range);
+                        av_log(NULL, AV_LOG_ERROR, "bsac->value %d!\n", bsac->value);
                         if (m) {
                             if (sample[ch][reg][i] >= 0)
                                 sample[ch][reg][i] += maxhalf;
@@ -2497,14 +2469,17 @@ static void decode_bsac_data(AACContext *ac, BSAC *bsac, int target,
                                 = sample_buf[0][offset + 4 * b + k];
                         samples[1][128 * (b + s) + i + k]
                                 = sample_buf[1][offset + 4 * b + k];
+                        av_log(NULL, AV_LOG_ERROR, "samples[0][%d] %d\n",128 * (b + s) + i + k, samples[0][128 * (b + s) + i + k]);
                     }
             }
+            av_log(NULL, AV_LOG_ERROR, "ics->group_len[w] %d\n", ics->group_len[w]);
             s += ics->group_len[w];
         }
     } else {
         for (i = 0; i < 1024; i++) {
             samples[0][i] = sample_buf[0][i];
             samples[1][i] = sample_buf[1][i];
+            av_log(NULL, AV_LOG_ERROR, "samples[0][%d] %d\n",i, samples[0][i]);
         }
     }
 }
