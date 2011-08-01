@@ -681,7 +681,6 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
     {
         bsac_decode_init(ac, ac->m4ac.sample_rate, 1024);
         ac->bsac->nch = avctx->channels;
-        av_log(NULL, AV_LOG_ERROR, "avctxnch %d\n", ac->bsac->nch);
         ac->output_data[0] = ac->bsac->che->ch[0].ret;
         if (ac->bsac->nch == 2)
             ac->output_data[1] = ac->bsac->che->ch[1].ret;
@@ -1167,9 +1166,6 @@ static int bsac_decode_symbol(BSAC *bsac, int *cum_freq, int *symbol,
     else
         bsac->range = bsac->range * (16384 - cum_freq[sym]);
 
-    av_log(NULL, AV_LOG_ERROR, "bsac->cw_len %d!\n", bsac->cw_len);
-    av_log(NULL, AV_LOG_ERROR, "bsac->range %d!\n", bsac->range);
-    av_log(NULL, AV_LOG_ERROR, "bsac->value %d!\n", bsac->value);
     for (bsac->cw_len = 0; bsac->range < bsac->half[bsac->cw_len]; bsac->cw_len++)
         ;
 
@@ -1338,7 +1334,7 @@ static int decode_bsac_cband_si(BSAC *bsac, int model_index[2][8][32], int *cban
             cband_model = cband_si_cbook_tbl[cband_si_type[ch]];
             max_model_index[ch] = max_modelindex_tbl[cband_si_type[ch]];
         }
-
+/*
         av_log(NULL, AV_LOG_ERROR, "start_cband[ch][g]! %d\n", start_cband[ch][g]);
         av_log(NULL, AV_LOG_ERROR, "end_cband[ch][g]! %d\n", end_cband[ch][g]);
         av_log(NULL, AV_LOG_ERROR, "cband_si_type[ch]! %d\n", cband_si_type[ch]);
@@ -1348,7 +1344,7 @@ static int decode_bsac_cband_si(BSAC *bsac, int model_index[2][8][32], int *cban
         av_log(NULL, AV_LOG_ERROR, "end_cband[ch][g] %d\n", end_cband[ch][g]);
         av_log(NULL, AV_LOG_ERROR, "start_cband[ch][g]! %d\n", start_cband[ch][g]);
         av_log(NULL, AV_LOG_ERROR, "g! %d\n", g);
-
+*/
         for (cband = start_cband[ch][g]; cband < end_cband[ch][g]; cband++) {
             si_cw_len += bsac_decode_symbol(bsac, AModelCBand[cband_model], &m, gb);
             model_index[ch][g][cband] = m;
@@ -1443,12 +1439,12 @@ static int bsac_initialize_layer_data(AACContext *ac,
               }
 
               layer = slayer_size;
-              av_log(NULL, AV_LOG_ERROR, "slayer_size! %d\n", slayer_size);
+              //av_log(NULL, AV_LOG_ERROR, "slayer_size! %d\n", slayer_size);
 
               for(g = 0; g < num_window_groups; g++) {
-                  av_log(NULL, AV_LOG_ERROR, "window_group_length[%d]! %d\n", g, window_group_length[g]);
+                  //av_log(NULL, AV_LOG_ERROR, "window_group_length[%d]! %d\n", g, window_group_length[g]);
                   for (i=0; i<window_group_length[g]; i++) {
-                      av_log(NULL, AV_LOG_ERROR, "slayer_size! %d\n", layer);
+                      //av_log(NULL, AV_LOG_ERROR, "slayer_size! %d\n", layer);
                       layer_reg[layer] = g;
                       layer++;
                   }
@@ -1646,8 +1642,6 @@ static int decode_bsac_spectra(BSAC *bsac,
 
     for (ch = 0; ch < bsac->nch; ch++) {
         for (reg = s_reg; reg < e_reg; reg++) {
-            av_log(NULL, AV_LOG_ERROR, "s_freq[ch][reg] %d\n", s_freq[ch][reg]);
-            av_log(NULL, AV_LOG_ERROR, "e_freq[ch][reg] %d\n", e_freq[ch][reg]);
             for (i = s_freq[ch][reg]; i < e_freq[ch][reg]; i++) {
                 if (maxbpl < cur_bpl[ch][reg][i]) {
                     maxbpl = cur_bpl[ch][reg][i];
@@ -1694,8 +1688,6 @@ static int decode_bsac_spectra(BSAC *bsac,
                         k = bsac_decode_symbol2(bsac, freq, &m, gb);
                         cw_len -= k;
 
-                        av_log(NULL, AV_LOG_ERROR, "bsac->range %d!\n", bsac->range);
-                        av_log(NULL, AV_LOG_ERROR, "bsac->value %d!\n", bsac->value);
                         if (m) {
                             if (sample[ch][reg][i] >= 0)
                                 sample[ch][reg][i] += maxhalf;
@@ -1770,11 +1762,12 @@ static float bsac_iquant_exp(int q)
 
 
 
-static void bsac_dequantization(BSAC *bsac,
-                                  int target,
-                                  int samples[],
-                                  int ch,
-                                  GetBitContext *gb)
+static void bsac_dequantization(AACContext *ac,
+                                BSAC *bsac,
+                                int target,
+                                int samples[],
+                                int ch,
+                                GetBitContext *gb)
 {
     int sfb, i, k;
     int *scalefactors = bsac->che->ch[ch].sf_idx;
@@ -1787,13 +1780,15 @@ static void bsac_dequantization(BSAC *bsac,
     for(i = 0; i < 1024; i++)
         decSpectrum[i] = -0.0;
 
-    if(bsac->che->ch[ch].ics.window_sequence != EIGHT_SHORT_SEQUENCE) {
+    if(bsac->che->ch[ch].ics.window_sequence[0] != EIGHT_SHORT_SEQUENCE) {
         for(sfb = 0; sfb < maxSfb; sfb++) {
+            //av_log(NULL, AV_LOG_ERROR, "\n maxSfb : %d \n", maxSfb);
             if(ch == 1 && bsac->is_mask[sfb])
                 continue;
-            scale = bsac_calc_scale(scalefactors[sfb] - 100);
+            scale = bsac_calc_scale(scalefactors[sfb] - 100) * ac->sf_scale;
             for(i = swb_offset_long[sfb]; i < swb_offset_long[sfb + 1]; i++) {
                 decSpectrum[i] = bsac_iquant_exp(samples[i]) * scale;
+                //av_log(NULL, AV_LOG_ERROR, "\n decSpectrum[%d] : %f swb_offset_long[%d] %d\n", i, decSpectrum[i], sfb, swb_offset_long[sfb]);
             }
         }
     } else {
@@ -1804,12 +1799,13 @@ static void bsac_dequantization(BSAC *bsac,
             for(sfb = 0; sfb < maxSfb; sfb++) {
                 if(ch == 1 && bsac->is_mask[(w * maxSfb) + sfb])
                     continue;
-                scale = bsac_calc_scale(scalefactors[w * maxSfb + sfb] - 100);
+                scale = bsac_calc_scale(scalefactors[w * maxSfb + sfb] - 100) * ac->sf_scale;
                 for (b = 0; b < bsac->che->ch[ch].ics.group_len[w]; b++) {
                     k = (s + b) * 128;
                     for (i = swb_offset_short[sfb]; i < swb_offset_short[sfb + 1]; i++) {
                         iquant = samples[k + i];
                         decSpectrum[k + i] = bsac_iquant_exp(iquant) * scale;
+                        //av_log(NULL, AV_LOG_ERROR, "iquant %d decSpectrum[%d] : %f scale: %f swb_offset_long[%d] %d\n", iquant, k+i, decSpectrum[k+i], scale, sfb, swb_offset_short[sfb]);
                     }
                 }
             }
@@ -1906,7 +1902,7 @@ static int bsac_put_bits_to_buf(unsigned int val, int N) {
             bs_buf_bit_idx = 8;
             bs_buf_byte_idx++;
             if (bs_buf_byte_idx > bs_buf_size - 1) {
-                av_log(NULL, AV_LOG_ERROR, "SAM: bitstream buffer overflow!\n");
+                av_log(NULL, AV_LOG_ERROR, "BSAC: bitstream buffer overflow!\n");
             }
         }
         j -= k;
@@ -1969,8 +1965,8 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
     int enc_top_layer = bsac->top_layer;
     int nch = bsac->nch;
 
-    av_log(NULL, AV_LOG_ERROR, "enc_top_layer! %d\n", enc_top_layer);
-    av_log(NULL, AV_LOG_ERROR, "target! %d\n", target);
+    //av_log(NULL, AV_LOG_ERROR, "enc_top_layer! %d\n", enc_top_layer);
+    //av_log(NULL, AV_LOG_ERROR, "target! %d\n", target);
 
     if (target > enc_top_layer)
         target = enc_top_layer;
@@ -2231,13 +2227,13 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
             for (ch = 0; ch < nch; ch++) {
                 g = layer_reg[layer];
                 e_freq[ch][g] = layer_max_freq[layer];
-                av_log(NULL, AV_LOG_ERROR, "e_freq[ch][g]+! %d\n", e_freq[ch][g]);
+                //av_log(NULL, AV_LOG_ERROR, "e_freq[ch][g]+! %d\n", e_freq[ch][g]);
             }
         }
     }
-    av_log(NULL, AV_LOG_ERROR, "slayer_size+! %d\n", slayer_size);
-    av_log(NULL, AV_LOG_ERROR, "target! %d\n", target);
-    av_log(NULL, AV_LOG_ERROR, "nch %d\n", nch);
+    //av_log(NULL, AV_LOG_ERROR, "slayer_size+! %d\n", slayer_size);
+    //av_log(NULL, AV_LOG_ERROR, "target! %d\n", target);
+    //av_log(NULL, AV_LOG_ERROR, "nch %d\n", nch);
 
     for (layer = 0; layer < target + slayer_size; layer++) {
         int min_snf;
@@ -2300,8 +2296,8 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
 
         cw_len = decode_bsac_cband_si(bsac, ModelIndex, bsac->cband_si_type,
                 start_cband, end_cband, g, gb);
-        av_log(NULL, AV_LOG_ERROR, "bsac->cband_si_type %d\n", bsac->cband_si_type);
-        av_log(NULL, AV_LOG_ERROR, "cw_len %d\n", cw_len);
+        //av_log(NULL, AV_LOG_ERROR, "bsac->cband_si_type %d\n", bsac->cband_si_type);
+        //av_log(NULL, AV_LOG_ERROR, "cw_len %d\n", cw_len);
         for (ch = 0; ch < nch; ch++) {
             g = layer_reg[layer];
             for (cband = start_cband[ch][g]; cband < end_cband[ch][g]; cband++) {
@@ -2323,11 +2319,11 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
         else
             scf_model = (int *) bsac->scf_model1;
 
-        av_log(NULL, AV_LOG_ERROR, "scf_model! %d\n", scf_model[0]);
+        //av_log(NULL, AV_LOG_ERROR, "scf_model! %d\n", scf_model[0]);
         cw_len = decode_bsac_scfband_si(bsac, start_qband, end_qband, scf_model, maxSfb,
                 stereo_si_coded, g, gb);
 
-        av_log(NULL, AV_LOG_ERROR, "decode_bsac_scfband_si cw_len %d\n", cw_len);
+        //av_log(NULL, AV_LOG_ERROR, "decode_bsac_scfband_si cw_len %d\n", cw_len);
         available_len -= cw_len;
 
         min_snf = layer < slayer_size ? bsac->base_snf_thr : 1;
@@ -2469,17 +2465,17 @@ static void decode_bsac_data(AACContext *ac, BSAC *bsac, int target,
                                 = sample_buf[0][offset + 4 * b + k];
                         samples[1][128 * (b + s) + i + k]
                                 = sample_buf[1][offset + 4 * b + k];
-                        av_log(NULL, AV_LOG_ERROR, "samples[0][%d] %d\n",128 * (b + s) + i + k, samples[0][128 * (b + s) + i + k]);
+                        //av_log(NULL, AV_LOG_ERROR, "samples[0][%d] %d\n",128 * (b + s) + i + k, samples[0][128 * (b + s) + i + k]);
                     }
             }
-            av_log(NULL, AV_LOG_ERROR, "ics->group_len[w] %d\n", ics->group_len[w]);
+            //av_log(NULL, AV_LOG_ERROR, "ics->group_len[w] %d\n", ics->group_len[w]);
             s += ics->group_len[w];
         }
     } else {
         for (i = 0; i < 1024; i++) {
             samples[0][i] = sample_buf[0][i];
             samples[1][i] = sample_buf[1][i];
-            av_log(NULL, AV_LOG_ERROR, "samples[0][%d] %d\n",i, samples[0][i]);
+            //av_log(NULL, AV_LOG_ERROR, "samples[0][%d] %d\n",i, samples[0][i]);
         }
     }
 }
@@ -2581,7 +2577,6 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
     bsac->top_layer = get_bits(gb, 6);
     bsac->base_snf_thr = get_bits(gb, 2) + 1;
 
-    av_log(NULL, AV_LOG_ERROR, "bsac->top_layer! %d\n", bsac->top_layer);
     for (ch = 0; ch < nch; ch++)
         bsac->max_scalefactor[ch] = bsac->che->ch[ch].ics.num_swb = get_bits(gb, 8);
 
@@ -2595,6 +2590,10 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
     }
 
     ics_reserved = get_bits1(gb);
+    for (ch = 0; ch < nch; ch++) {
+        bsac->che->ch[ch].ics.window_sequence[1] = bsac->che->ch[ch].ics.window_sequence[0];
+        bsac->che->ch[ch].ics.use_kb_window[1]   = bsac->che->ch[ch].ics.use_kb_window[0];
+    }
     bsac->che->ch[0].ics.window_sequence[0] = get_bits(gb, 2);
     bsac->che->ch[0].ics.use_kb_window[0] = get_bits1(gb);
 
@@ -2664,11 +2663,10 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
                      used_bits, samples, gb);
 
     usedBits = get_bits_count(gb);
-    av_log(NULL, AV_LOG_ERROR, "\n used : %d \n", usedBits);
 
 
     for (ch = 0; ch < nch; ch++) {
-        bsac_dequantization(bsac, target_br, samples[ch],
+        bsac_dequantization(ac, bsac, target_br, samples[ch],
                 ch, gb);
     }
 
@@ -2696,7 +2694,6 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
 
 
     usedBits = get_bits_count(gb);
-    av_log(NULL, AV_LOG_ERROR, "\n used : %d \n", usedBits);
 
     bsac->frameLength = gb->size_in_bits / 8 * 8;
 
