@@ -1799,7 +1799,7 @@ static void bsac_dequantization(AACContext *ac,
             for(sfb = 0; sfb < maxSfb; sfb++) {
                 if(ch == 1 && bsac->is_mask[(w * maxSfb) + sfb])
                     continue;
-                scale = bsac_calc_scale(scalefactors[w * maxSfb + sfb] - 100) * ac->sf_scale;
+                scale = bsac_calc_scale(scalefactors[w * maxSfb + sfb] - 100) * ac->sf_scale * 8;
                 for (b = 0; b < bsac->che->ch[ch].ics.group_len[w]; b++) {
                     k = (s + b) * 128;
                     for (i = swb_offset_short[sfb]; i < swb_offset_short[sfb + 1]; i++) {
@@ -2672,19 +2672,23 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
 
     if (ms_mask[0]) {
         /* modified apply_mid_side_stereo() */
+        av_log(NULL, AV_LOG_ERROR, "MS on!!!!!\n");
     }
 
     if (pns_data_present) {
         /* pns() */
+        av_log(NULL, AV_LOG_ERROR, "PNS on!!!!!\n");
     }
 
     if (nch == 2 && bsac->is_intensity) {
         /* modified apply_intensity_stereo() */
+        av_log(NULL, AV_LOG_ERROR, "IS on!!!!!\n");
     }
 
     for (ch = 0; ch < nch; ch++) {
         if (bsac->che->ch[ch].tns.present) {
             /* TNS decoding: modified apply_tns() */
+            av_log(NULL, AV_LOG_ERROR, "TNS on!!!!!\n");
         }
     }
 
