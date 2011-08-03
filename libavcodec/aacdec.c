@@ -2541,183 +2541,6 @@ static void imdct_and_windowing(AACContext *ac, SingleChannelElement *sce)
 }
 
 
-static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
-        GetBitContext *gb)
-{
-    uint8_t *window_Shape[2];
-    int i, ch, b;
-    int usedBits;
-    int header_length;
-    int groupInfo[7];
-    int ms_mask[MAX_SCFAC_BANDS + 1];
-    int pns_data_present;
-    int pns_sfb_start = 63;
-    int used_bits = 0;
-    int ics_reserved;
-    int samples[2][1024];
-    float *spectrums[2];
-    int nch = bsac->nch;
-
-
-    for (i = 0; i < MAX_SCFAC_BANDS; i++) {
-        bsac->che->ms_mask[i] = 0;
-        bsac->is_mask[i] = 0;
-        bsac->pns->sfb_flag[0][i] = 0;
-        bsac->pns->sfb_flag[1][i] = 0;
-        bsac->pns->sfb_mode[i] = 0;
-    }
-
-    bsac->che->ms_mode = 0;
-    bsac->is_intensity = 0;
-
-    bsac->frameLength = get_bits(gb, 11) * 8;
-
-    header_length = get_bits(gb, 4);
-    bsac->sba_mode = get_bits1(gb);
-    bsac->top_layer = get_bits(gb, 6);
-    bsac->base_snf_thr = get_bits(gb, 2) + 1;
-
-    for (ch = 0; ch < nch; ch++)
-        bsac->max_scalefactor[ch] = bsac->che->ch[ch].ics.num_swb = get_bits(gb, 8);
-
-    bsac->base_band = get_bits(gb, 5);
-
-    for (ch = 0; ch < nch; ch++) {
-        bsac->cband_si_type[ch] = get_bits(gb, 5);
-        bsac->scf_model0[ch] = get_bits(gb, 3);
-        bsac->scf_model1[ch] = get_bits(gb, 3);
-        bsac->max_sfb_si_len[ch] = get_bits(gb, 4);
-    }
-
-    ics_reserved = get_bits1(gb);
-    for (ch = 0; ch < nch; ch++) {
-        bsac->che->ch[ch].ics.window_sequence[1] = bsac->che->ch[ch].ics.window_sequence[0];
-        bsac->che->ch[ch].ics.use_kb_window[1]   = bsac->che->ch[ch].ics.use_kb_window[0];
-    }
-    bsac->che->ch[0].ics.window_sequence[0] = get_bits(gb, 2);
-    bsac->che->ch[0].ics.use_kb_window[0] = get_bits1(gb);
-
-    if (bsac->che->ch[0].ics.window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
-        bsac->che->ch[0].ics.max_sfb =
-                bsac->che->ch[1].ics.max_sfb = get_bits(gb, 4);
-        for (i = 0; i < 7; i++)
-            groupInfo[i] = get_bits1(gb);
-    } else {
-        bsac->che->ch[0].ics.max_sfb =
-                bsac->che->ch[1].ics.max_sfb = get_bits(gb, 6);
-    }
-
-    bsac->che->ch[0].ics.num_window_groups = 1;
-    bsac->che->ch[0].ics.group_len[0] = 1;
-    if (bsac->che->ch[0].ics.window_sequence[0] == 2) {
-        for (b = 0; b < 7; b++) {
-            if (groupInfo[b] == 0) {
-                bsac->che->ch[0].ics.group_len[bsac->che->ch[0].ics.num_window_groups] = 1;
-                bsac->che->ch[0].ics.num_window_groups++;
-            } else {
-                bsac->che->ch[0].ics.group_len[bsac->che->ch[0].ics.num_window_groups - 1]++;
-            }
-        }
-    }
-
-    pns_data_present = get_bits1(gb);
-    if (pns_data_present)
-        pns_sfb_start = get_bits(gb, 6);
-
-    if (nch == 2) {
-        bsac->che->ms_mode = get_bits(gb, 2);
-        if (bsac->che->ms_mode == 1) {
-            bsac->che->ms_mask[0] = 1;
-        } else if (bsac->che->ms_mode == 2) {
-            bsac->che->ms_mask[0] = 2;
-            for (i = 0; i < MAX_SCFAC_BANDS; i++)
-                bsac->che->ms_mask[i + 1] = 1;
-        } else if (bsac->che->ms_mode == 3) {
-            bsac->che->ms_mask[0] = 1;
-            bsac->is_intensity = 1;
-        }
-    }
-
-    for (ch = 0; ch < nch; ch++) {
-        bsac->che->ch[ch].tns.present = get_bits(gb, 1);
-        if (bsac->che->ch[ch].tns.present) {
-            /* tns decoding: modified decode_tns() */
-        }
-
-        bsac->che->ch[ch].ics.ltp.present = get_bits(gb, 1);
-    }
-
-    if (nch == 2) {
-        bsac->che->ch[1].ics.window_sequence[0] = bsac->che->ch[0].ics.window_sequence[0];
-        bsac->che->ch[1].ics.use_kb_window[0]   = bsac->che->ch[0].ics.use_kb_window[0];
-    }
-
-    used_bits = get_bits_count(gb);
-
-
-    if (target_br == 0) {
-        target_br = bsac->top_layer + 16;
-    }
-
-    decode_bsac_data(ac, bsac, target_br, bsac->che->ch[0].ics.max_sfb,
-                     used_bits, samples, gb);
-
-    usedBits = get_bits_count(gb);
-
-
-    for (ch = 0; ch < nch; ch++) {
-        bsac_dequantization(ac, bsac, target_br, samples[ch],
-                ch, gb);
-    }
-
-    if (ms_mask[0]) {
-        /* modified apply_mid_side_stereo() */
-        av_log(NULL, AV_LOG_ERROR, "MS on!!!!!\n");
-    }
-
-    if (pns_data_present) {
-        /* pns() */
-        av_log(NULL, AV_LOG_ERROR, "PNS on!!!!!\n");
-    }
-
-    if (nch == 2 && bsac->is_intensity) {
-        /* modified apply_intensity_stereo() */
-        av_log(NULL, AV_LOG_ERROR, "IS on!!!!!\n");
-    }
-
-    for (ch = 0; ch < nch; ch++) {
-        if (bsac->che->ch[ch].tns.present) {
-            /* TNS decoding: modified apply_tns() */
-            av_log(NULL, AV_LOG_ERROR, "TNS on!!!!!\n");
-        }
-    }
-
-    imdct_and_windowing(ac, &bsac->che->ch[0]);
-    if (nch == 2)
-        imdct_and_windowing(ac, &bsac->che->ch[1]);
-
-
-    usedBits = get_bits_count(gb);
-
-    bsac->frameLength = gb->size_in_bits / 8 * 8;
-
-    while (usedBits < bsac->frameLength) {
-        int remain, read_bits;
-
-        remain = bsac->frameLength - usedBits;
-        read_bits = remain > 8 ? 8 : remain;
-        i = get_bits(gb, read_bits);
-        usedBits = get_bits_count(gb);
-    }
-
-    return usedBits;
-}
-
-
-
-
-
-
 
 
 #ifndef VMUL2
@@ -3804,6 +3627,239 @@ static int parse_adts_frame_header(AACContext *ac, GetBitContext *gb)
     }
     return size;
 }
+
+
+static long bsac_random(long *seed)
+{
+    *seed = (1664525L * *seed) + 1013904223L;
+    return (long) (*seed);
+}
+
+static void bsac_gen_rand_vector(float *spec, int size, long *state)
+{
+    int i;
+    float s, norm, nrg = 0.0;
+
+    norm = 1.0 / sqrt(size * 1.5625e+18);
+    for (i = 0; i < size; i++) {
+        spec[i] = (float) (bsac_random(state) * norm);
+        nrg += spec[i] * spec[i];
+    }
+    s = 1.0 / sqrt(nrg);
+
+    for (i = 0; i < size; i++) {
+        spec[i] *= s;
+    }
+}
+
+static void bsac_pns(BSAC *bsac) {
+    int i, size, ch, sfb;
+    int corr_flag;
+    long *nsp;
+    float *fp, scale;
+    static long cur_noise_state;
+    static long noise_state_save[136];
+
+    for (ch = 0; ch < bsac->nch; ch++) {
+        nsp = noise_state_save;
+
+        for (sfb = 0; sfb < bsac->che->ch[ch].ics.max_sfb; sfb++) {
+
+            if (bsac->pns->sfb_flag[ch][sfb] == 0)
+                continue;
+
+            corr_flag = bsac->pns->sfb_mode[sfb];
+            fp = bsac->che->ch[ch].coeffs + swb_offset_long[sfb];
+            size = swb_offset_long[sfb + 1] - swb_offset_long[sfb];
+
+            if (corr_flag) {
+                bsac_gen_rand_vector(fp, size, nsp + sfb);
+            } else {
+                nsp[sfb] = cur_noise_state;
+                bsac_gen_rand_vector(fp, size, &cur_noise_state);
+            }
+
+            scale = pow(2.0, 0.25 * bsac->che->ch[ch].sf_idx[sfb]);
+
+            for (i = swb_offset_long[sfb]; i < swb_offset_long[sfb + 1]; i++) {
+                *fp++ *= scale;
+            }
+        }
+    }
+}
+
+
+
+static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
+        GetBitContext *gb)
+{
+    int i, ch, b;
+    int usedBits;
+    int header_length;
+    int groupInfo[7];
+    int ms_mask[MAX_SCFAC_BANDS + 1];
+    int used_bits = 0;
+    int ics_reserved;
+    int samples[2][1024];
+    int nch = bsac->nch;
+
+
+    for (i = 0; i < MAX_SCFAC_BANDS; i++) {
+        bsac->che->ms_mask[i] = 0;
+        bsac->is_mask[i] = 0;
+        bsac->pns->sfb_flag[0][i] = 0;
+        bsac->pns->sfb_flag[1][i] = 0;
+        bsac->pns->sfb_mode[i] = 0;
+    }
+
+    bsac->che->ms_mode = 0;
+    bsac->is_intensity = 0;
+
+    bsac->frameLength = get_bits(gb, 11) * 8;
+
+    header_length = get_bits(gb, 4);
+    bsac->sba_mode = get_bits1(gb);
+    bsac->top_layer = get_bits(gb, 6);
+    bsac->base_snf_thr = get_bits(gb, 2) + 1;
+
+    for (ch = 0; ch < nch; ch++)
+        bsac->max_scalefactor[ch] = bsac->che->ch[ch].ics.num_swb = get_bits(gb, 8);
+
+    bsac->base_band = get_bits(gb, 5);
+
+    for (ch = 0; ch < nch; ch++) {
+        bsac->cband_si_type[ch] = get_bits(gb, 5);
+        bsac->scf_model0[ch] = get_bits(gb, 3);
+        bsac->scf_model1[ch] = get_bits(gb, 3);
+        bsac->max_sfb_si_len[ch] = get_bits(gb, 4);
+    }
+
+    ics_reserved = get_bits1(gb);
+    for (ch = 0; ch < nch; ch++) {
+        bsac->che->ch[ch].ics.window_sequence[1] = bsac->che->ch[ch].ics.window_sequence[0];
+        bsac->che->ch[ch].ics.use_kb_window[1]   = bsac->che->ch[ch].ics.use_kb_window[0];
+    }
+    bsac->che->ch[0].ics.window_sequence[0] = get_bits(gb, 2);
+    bsac->che->ch[0].ics.use_kb_window[0] = get_bits1(gb);
+
+    if (bsac->che->ch[0].ics.window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
+        bsac->che->ch[0].ics.max_sfb =
+                bsac->che->ch[1].ics.max_sfb = get_bits(gb, 4);
+        for (i = 0; i < 7; i++)
+            groupInfo[i] = get_bits1(gb);
+    } else {
+        bsac->che->ch[0].ics.max_sfb =
+                bsac->che->ch[1].ics.max_sfb = get_bits(gb, 6);
+    }
+
+    bsac->che->ch[0].ics.num_window_groups = 1;
+    bsac->che->ch[0].ics.group_len[0] = 1;
+    if (bsac->che->ch[0].ics.window_sequence[0] == 2) {
+        for (b = 0; b < 7; b++) {
+            if (groupInfo[b] == 0) {
+                bsac->che->ch[0].ics.group_len[bsac->che->ch[0].ics.num_window_groups] = 1;
+                bsac->che->ch[0].ics.num_window_groups++;
+            } else {
+                bsac->che->ch[0].ics.group_len[bsac->che->ch[0].ics.num_window_groups - 1]++;
+            }
+        }
+    }
+
+    bsac->pns->present = get_bits1(gb);
+    if (bsac->pns->present)
+        bsac->pns->start_sfb = get_bits(gb, 6);
+
+    if (nch == 2) {
+        bsac->che->ms_mode = get_bits(gb, 2);
+        if (bsac->che->ms_mode == 1) {
+            bsac->che->ms_mask[0] = 1;
+        } else if (bsac->che->ms_mode == 2) {
+            bsac->che->ms_mask[0] = 2;
+            for (i = 0; i < MAX_SCFAC_BANDS; i++)
+                bsac->che->ms_mask[i + 1] = 1;
+        } else if (bsac->che->ms_mode == 3) {
+            bsac->che->ms_mask[0] = 1;
+            bsac->is_intensity = 1;
+        }
+    }
+
+    for (ch = 0; ch < nch; ch++) {
+        bsac->che->ch[ch].tns.present = get_bits(gb, 1);
+        if (bsac->che->ch[ch].tns.present) {
+            decode_tns(ac, &bsac->che->ch[ch].tns, gb, &bsac->che->ch[ch].ics);
+            av_log(NULL, AV_LOG_ERROR, "TNS on!!!!!\n");
+        }
+
+        bsac->che->ch[ch].ics.ltp.present = get_bits(gb, 1);
+    }
+
+    if (nch == 2) {
+        bsac->che->ch[1].ics.window_sequence[0] = bsac->che->ch[0].ics.window_sequence[0];
+        bsac->che->ch[1].ics.use_kb_window[0]   = bsac->che->ch[0].ics.use_kb_window[0];
+    }
+
+    used_bits = get_bits_count(gb);
+    av_log(NULL, AV_LOG_ERROR, "used_bits!: %d!!!!\n", used_bits);
+
+
+    if (target_br == 0) {
+        target_br = bsac->top_layer + 16;
+    }
+
+    decode_bsac_data(ac, bsac, target_br, bsac->che->ch[0].ics.max_sfb,
+                     used_bits, samples, gb);
+
+    usedBits = get_bits_count(gb);
+
+
+    for (ch = 0; ch < nch; ch++) {
+        bsac_dequantization(ac, bsac, target_br, samples[ch],
+                ch, gb);
+    }
+
+    if (ms_mask[0]) {
+        apply_mid_side_stereo(ac, bsac->che);
+        av_log(NULL, AV_LOG_ERROR, "MS on!!!!!\n");
+    }
+
+    if (bsac->pns->present) {
+        bsac_pns(bsac);
+        av_log(NULL, AV_LOG_ERROR, "PNS on!!!!!\n");
+    }
+
+    if (nch == 2 && bsac->is_intensity) {
+        apply_intensity_stereo(ac, bsac->che, bsac->che->ms_mode);
+        av_log(NULL, AV_LOG_ERROR, "IS on!!!!!\n");
+    }
+
+    for (ch = 0; ch < nch; ch++) {
+        if (bsac->che->ch[ch].tns.present) {
+            apply_tns(bsac->che->ch[ch].coeffs, &bsac->che->ch[ch].tns, &bsac->che->ch[ch].ics, 1);
+            av_log(NULL, AV_LOG_ERROR, "TNS on!!!!!\n");
+        }
+    }
+
+    imdct_and_windowing(ac, &bsac->che->ch[0]);
+    if (nch == 2)
+        imdct_and_windowing(ac, &bsac->che->ch[1]);
+
+
+    usedBits = get_bits_count(gb);
+
+    bsac->frameLength = gb->size_in_bits / 8 * 8;
+
+    while (usedBits < bsac->frameLength) {
+        int remain, read_bits;
+
+        remain = bsac->frameLength - usedBits;
+        read_bits = remain > 8 ? 8 : remain;
+        i = get_bits(gb, read_bits);
+        usedBits = get_bits_count(gb);
+    }
+
+    return usedBits;
+}
+
 
 static int bsac_decode_frame_int(AVCodecContext *avctx, void *data,
                                  int *data_size, GetBitContext *gb)
