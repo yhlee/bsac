@@ -461,7 +461,9 @@ static int decode_ga_specific_config(AACContext *ac, AVCodecContext *avctx,
         case AOT_ER_BSAC:
             ac->bsac = av_mallocz(sizeof(BSAC));
             ac->bsac->che = av_mallocz(sizeof(ChannelElement));
+            ac->bsac->tns[0] = av_mallocz(sizeof(TemporalNoiseShaping));
             ac->bsac->ltp[0] = av_mallocz(sizeof(LongTermPrediction));
+            ac->bsac->tns[1] = av_mallocz(sizeof(TemporalNoiseShaping));
             ac->bsac->ltp[1] = av_mallocz(sizeof(LongTermPrediction));
             ac->bsac->pns = av_mallocz(sizeof(PerceptualNoise));
             ac->bsac->numOfSubFrame = get_bits(gb, 5);    // numOfSubFrame
@@ -1963,6 +1965,8 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
     int enc_top_layer = bsac->top_layer;
     int nch = bsac->nch;
 
+    //av_log(NULL, AV_LOG_ERROR, "enc_top_layer! %d\n", enc_top_layer);
+    //av_log(NULL, AV_LOG_ERROR, "target! %d\n", target);
 
     if (target > enc_top_layer)
         target = enc_top_layer;
@@ -2422,7 +2426,7 @@ static void decode_bsac_data(AACContext *ac, BSAC *bsac, int target,
         int used_bits, int samples[2][1024], GetBitContext *gb)
 {
     IndividualChannelStream *ics = &bsac->che->ch[0].ics;
-    int w, i;
+    int b, w, i;
     int sfb;
     int swb_offset[8][52];
     int sample_buf[2][1024];
@@ -2430,7 +2434,8 @@ static void decode_bsac_data(AACContext *ac, BSAC *bsac, int target,
     target = (target - 16);
     bsac->top_band = bsac->long_sfb_top;
     if (ics->window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
-        for (w = 0; w < ics->num_window_groups; w++) {
+        b = 1;
+        for (w = 0; w < ics->num_window_groups; w++, b++) {
             swb_offset[w][0] = 0;
             for (sfb = 0; sfb < bsac->short_sfb_top; sfb++) {
                 swb_offset[w][sfb + 1] = swb_offset_short[sfb + 1]
@@ -2460,14 +2465,17 @@ static void decode_bsac_data(AACContext *ac, BSAC *bsac, int target,
                                 = sample_buf[0][offset + 4 * b + k];
                         samples[1][128 * (b + s) + i + k]
                                 = sample_buf[1][offset + 4 * b + k];
+                        //av_log(NULL, AV_LOG_ERROR, "samples[0][%d] %d\n",128 * (b + s) + i + k, samples[0][128 * (b + s) + i + k]);
                     }
             }
+            //av_log(NULL, AV_LOG_ERROR, "ics->group_len[w] %d\n", ics->group_len[w]);
             s += ics->group_len[w];
         }
     } else {
         for (i = 0; i < 1024; i++) {
             samples[0][i] = sample_buf[0][i];
             samples[1][i] = sample_buf[1][i];
+            //av_log(NULL, AV_LOG_ERROR, "samples[0][%d] %d\n",i, samples[0][i]);
         }
     }
 }
@@ -3685,7 +3693,6 @@ static void bsac_pns(BSAC *bsac) {
 static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
         GetBitContext *gb)
 {
-    SingleChannelElement *sce[2];
     int i, ch, b;
     int usedBits;
     int header_length;
@@ -3715,10 +3722,8 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
     bsac->top_layer = get_bits(gb, 6);
     bsac->base_snf_thr = get_bits(gb, 2) + 1;
 
-    for (ch = 0; ch < nch; ch++) {
-        sce[ch] = &bsac->che->ch[ch];
-        bsac->max_scalefactor[ch] = sce[ch]->ics.num_swb = get_bits(gb, 8);
-    }
+    for (ch = 0; ch < nch; ch++)
+        bsac->max_scalefactor[ch] = bsac->che->ch[ch].ics.num_swb = get_bits(gb, 8);
 
     bsac->base_band = get_bits(gb, 5);
 
@@ -3731,31 +3736,31 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
 
     ics_reserved = get_bits1(gb);
     for (ch = 0; ch < nch; ch++) {
-        sce[ch]->ics.window_sequence[1] = sce[ch]->ics.window_sequence[0];
-        sce[ch]->ics.use_kb_window[1]   = sce[ch]->ics.use_kb_window[0];
+        bsac->che->ch[ch].ics.window_sequence[1] = bsac->che->ch[ch].ics.window_sequence[0];
+        bsac->che->ch[ch].ics.use_kb_window[1]   = bsac->che->ch[ch].ics.use_kb_window[0];
     }
-    sce[0]->ics.window_sequence[0] = get_bits(gb, 2);
-    sce[0]->ics.use_kb_window[0] = get_bits1(gb);
+    bsac->che->ch[0].ics.window_sequence[0] = get_bits(gb, 2);
+    bsac->che->ch[0].ics.use_kb_window[0] = get_bits1(gb);
 
-    if (sce[0]->ics.window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
-        sce[0]->ics.max_sfb = sce[0]->ics.max_sfb = get_bits(gb, 4);
-
-        for (i = 0; i < 7; i++) {
+    if (bsac->che->ch[0].ics.window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
+        bsac->che->ch[0].ics.max_sfb =
+                bsac->che->ch[1].ics.max_sfb = get_bits(gb, 4);
+        for (i = 0; i < 7; i++)
             groupInfo[i] = get_bits1(gb);
-        }
     } else {
-        sce[0]->ics.max_sfb = sce[1]->ics.max_sfb = get_bits(gb, 6);
+        bsac->che->ch[0].ics.max_sfb =
+                bsac->che->ch[1].ics.max_sfb = get_bits(gb, 6);
     }
 
-    sce[0]->ics.num_window_groups = 1;
-    sce[0]->ics.group_len[0] = 1;
-    if (sce[0]->ics.window_sequence[0] == 2) {
+    bsac->che->ch[0].ics.num_window_groups = 1;
+    bsac->che->ch[0].ics.group_len[0] = 1;
+    if (bsac->che->ch[0].ics.window_sequence[0] == 2) {
         for (b = 0; b < 7; b++) {
             if (groupInfo[b] == 0) {
-                sce[0]->ics.group_len[sce[0]->ics.num_window_groups] = 1;
-                sce[0]->ics.num_window_groups++;
+                bsac->che->ch[0].ics.group_len[bsac->che->ch[0].ics.num_window_groups] = 1;
+                bsac->che->ch[0].ics.num_window_groups++;
             } else {
-                sce[0]->ics.group_len[sce[0]->ics.num_window_groups - 1]++;
+                bsac->che->ch[0].ics.group_len[bsac->che->ch[0].ics.num_window_groups - 1]++;
             }
         }
     }
@@ -3779,29 +3784,29 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
     }
 
     for (ch = 0; ch < nch; ch++) {
-        sce[ch]->tns.present = get_bits(gb, 1);
-        if (sce[ch]->tns.present) {
-            decode_tns(ac, &sce[ch]->tns, gb, &sce[ch]->ics);
+        bsac->che->ch[ch].tns.present = get_bits(gb, 1);
+        if (bsac->che->ch[ch].tns.present) {
+            decode_tns(ac, &bsac->che->ch[ch].tns, gb, &bsac->che->ch[ch].ics);
             av_log(NULL, AV_LOG_ERROR, "TNS on!!!!!\n");
         }
 
-        sce[ch]->ics.ltp.present = get_bits(gb, 1);
+        bsac->che->ch[ch].ics.ltp.present = get_bits(gb, 1);
     }
 
     if (nch == 2) {
-        sce[1]->ics.window_sequence[0] = sce[0]->ics.window_sequence[0];
-        sce[1]->ics.use_kb_window[0]   = sce[0]->ics.use_kb_window[0];
+        bsac->che->ch[1].ics.window_sequence[0] = bsac->che->ch[0].ics.window_sequence[0];
+        bsac->che->ch[1].ics.use_kb_window[0]   = bsac->che->ch[0].ics.use_kb_window[0];
     }
 
     used_bits = get_bits_count(gb);
-    //av_log(NULL, AV_LOG_ERROR, "used_bits!: %d!!!!\n", used_bits);
+    av_log(NULL, AV_LOG_ERROR, "used_bits!: %d!!!!\n", used_bits);
 
 
     if (target_br == 0) {
         target_br = bsac->top_layer + 16;
     }
 
-    decode_bsac_data(ac, bsac, target_br, sce[0]->ics.max_sfb,
+    decode_bsac_data(ac, bsac, target_br, bsac->che->ch[0].ics.max_sfb,
                      used_bits, samples, gb);
 
     usedBits = get_bits_count(gb);
@@ -3828,15 +3833,15 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
     }
 
     for (ch = 0; ch < nch; ch++) {
-        if (sce[ch]->tns.present) {
-            apply_tns(sce[ch]->coeffs, &sce[ch]->tns, &sce[ch]->ics, 1);
+        if (bsac->che->ch[ch].tns.present) {
+            apply_tns(bsac->che->ch[ch].coeffs, &bsac->che->ch[ch].tns, &bsac->che->ch[ch].ics, 1);
             av_log(NULL, AV_LOG_ERROR, "TNS on!!!!!\n");
         }
     }
 
-    imdct_and_windowing(ac, sce[0]);
+    imdct_and_windowing(ac, &bsac->che->ch[0]);
     if (nch == 2)
-        imdct_and_windowing(ac, sce[1]);
+        imdct_and_windowing(ac, &bsac->che->ch[1]);
 
 
     usedBits = get_bits_count(gb);
@@ -3861,6 +3866,8 @@ static int bsac_decode_frame_int(AVCodecContext *avctx, void *data,
 {
     AACContext *ac = avctx->priv_data;
     BSAC *bsac = ac->bsac;
+    ChannelElement *che = bsac->che;
+    int i;
     int target = 0;
 
     // bsacAUDecode function maped

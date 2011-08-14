@@ -1,7 +1,7 @@
 prefix=
 exec_prefix=
 libdir=${pcfiledir}
-includedir=/home/beckgom/Downloads/libav-HEAD-76cd98b
+includedir=/home/beckgom/bsac
 
 Name: libavdevice
 Description: Libav device handling library
