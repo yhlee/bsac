@@ -1221,6 +1221,7 @@ static int decode_bsac_scfband_si(BSAC *bsac,
             if(bsac->nch == 1) {
                 if(bsac->pns->present && sfb >= bsac->pns->start_sfb) {
                     si_cw_len += bsac_decode_symbol(bsac, AModelNoiseFlag, &m, gb);
+                    av_log(NULL, AV_LOG_ERROR, "si_cw_len %d\n", si_cw_len);
                     bsac->pns->sfb_flag[0][g * maxSfb + sfb] = m;
                 }
             } else if(stereo_si_coded[maxSfb * g + sfb] == 0) {
@@ -1968,6 +1969,7 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
     //av_log(NULL, AV_LOG_ERROR, "enc_top_layer! %d\n", enc_top_layer);
     //av_log(NULL, AV_LOG_ERROR, "target! %d\n", target);
 
+    bsac->pns->pcm_flag[1] = bsac->pns->pcm_flag[0] = 1;
     if (target > enc_top_layer)
         target = enc_top_layer;
 
@@ -3663,8 +3665,10 @@ static void bsac_pns(BSAC *bsac) {
     for (ch = 0; ch < bsac->nch; ch++) {
         nsp = noise_state_save;
 
+        av_log(NULL, AV_LOG_ERROR, "max_sfb %d\n", bsac->che->ch[ch].ics.max_sfb);
         for (sfb = 0; sfb < bsac->che->ch[ch].ics.max_sfb; sfb++) {
 
+            av_log(NULL, AV_LOG_ERROR, "sfb_flag %d\n", bsac->pns->sfb_flag[ch][sfb]);
             if (bsac->pns->sfb_flag[ch][sfb] == 0)
                 continue;
 
@@ -3679,7 +3683,11 @@ static void bsac_pns(BSAC *bsac) {
                 bsac_gen_rand_vector(fp, size, &cur_noise_state);
             }
 
-            scale = pow(2.0, 0.25 * bsac->che->ch[ch].sf_idx[sfb]);
+            if (bsac->che->ch[0].ics.window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
+                scale = pow(2.0, 0.25 * bsac->che->ch[ch].sf_idx[sfb]) / 128;
+            } else {
+                scale = pow(2.0, 0.25 * bsac->che->ch[ch].sf_idx[sfb]) / 1024;
+            }
 
             for (i = swb_offset_long[sfb]; i < swb_offset_long[sfb + 1]; i++) {
                 *fp++ *= scale;
@@ -3766,8 +3774,10 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
     }
 
     bsac->pns->present = get_bits1(gb);
-    if (bsac->pns->present)
+    if (bsac->pns->present) {
         bsac->pns->start_sfb = get_bits(gb, 6);
+        av_log(NULL, AV_LOG_ERROR, "bsac->pns->start_sfb!!!!! %d\n", bsac->pns->start_sfb);
+    }
 
     if (nch == 2) {
         bsac->che->ms_mode = get_bits(gb, 2);
