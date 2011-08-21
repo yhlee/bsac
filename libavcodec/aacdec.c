@@ -1221,7 +1221,6 @@ static int decode_bsac_scfband_si(BSAC *bsac,
             if(bsac->nch == 1) {
                 if(bsac->pns->present && sfb >= bsac->pns->start_sfb) {
                     si_cw_len += bsac_decode_symbol(bsac, AModelNoiseFlag, &m, gb);
-                    av_log(NULL, AV_LOG_ERROR, "si_cw_len %d\n", si_cw_len);
                     bsac->pns->sfb_flag[0][g * maxSfb + sfb] = m;
                 }
             } else if(stereo_si_coded[maxSfb * g + sfb] == 0) {
@@ -1335,17 +1334,7 @@ static int decode_bsac_cband_si(BSAC *bsac, int model_index[2][8][32], int *cban
             cband_model = cband_si_cbook_tbl[cband_si_type[ch]];
             max_model_index[ch] = max_modelindex_tbl[cband_si_type[ch]];
         }
-/*
-        av_log(NULL, AV_LOG_ERROR, "start_cband[ch][g]! %d\n", start_cband[ch][g]);
-        av_log(NULL, AV_LOG_ERROR, "end_cband[ch][g]! %d\n", end_cband[ch][g]);
-        av_log(NULL, AV_LOG_ERROR, "cband_si_type[ch]! %d\n", cband_si_type[ch]);
-        av_log(NULL, AV_LOG_ERROR, "cband_model! %d\n", cband_model);
 
-
-        av_log(NULL, AV_LOG_ERROR, "end_cband[ch][g] %d\n", end_cband[ch][g]);
-        av_log(NULL, AV_LOG_ERROR, "start_cband[ch][g]! %d\n", start_cband[ch][g]);
-        av_log(NULL, AV_LOG_ERROR, "g! %d\n", g);
-*/
         for (cband = start_cband[ch][g]; cband < end_cband[ch][g]; cband++) {
             si_cw_len += bsac_decode_symbol(bsac, AModelCBand[cband_model], &m, gb);
             model_index[ch][g][cband] = m;
@@ -1440,12 +1429,9 @@ static int bsac_initialize_layer_data(AACContext *ac,
               }
 
               layer = slayer_size;
-              //av_log(NULL, AV_LOG_ERROR, "slayer_size! %d\n", slayer_size);
 
               for(g = 0; g < num_window_groups; g++) {
-                  //av_log(NULL, AV_LOG_ERROR, "window_group_length[%d]! %d\n", g, window_group_length[g]);
                   for (i=0; i<window_group_length[g]; i++) {
-                      //av_log(NULL, AV_LOG_ERROR, "slayer_size! %d\n", layer);
                       layer_reg[layer] = g;
                       layer++;
                   }
@@ -1783,13 +1769,11 @@ static void bsac_dequantization(AACContext *ac,
 
     if(bsac->che->ch[ch].ics.window_sequence[0] != EIGHT_SHORT_SEQUENCE) {
         for(sfb = 0; sfb < maxSfb; sfb++) {
-            //av_log(NULL, AV_LOG_ERROR, "\n maxSfb : %d \n", maxSfb);
             if(ch == 1 && bsac->is_mask[sfb])
                 continue;
             scale = bsac_calc_scale(scalefactors[sfb] - 100) * ac->sf_scale;
             for(i = swb_offset_long[sfb]; i < swb_offset_long[sfb + 1]; i++) {
                 decSpectrum[i] = bsac_iquant_exp(samples[i]) * scale;
-                //av_log(NULL, AV_LOG_ERROR, "\n decSpectrum[%d] : %f swb_offset_long[%d] %d\n", i, decSpectrum[i], sfb, swb_offset_long[sfb]);
             }
         }
     } else {
@@ -1806,7 +1790,6 @@ static void bsac_dequantization(AACContext *ac,
                     for (i = swb_offset_short[sfb]; i < swb_offset_short[sfb + 1]; i++) {
                         iquant = samples[k + i];
                         decSpectrum[k + i] = bsac_iquant_exp(iquant) * scale;
-                        //av_log(NULL, AV_LOG_ERROR, "iquant %d decSpectrum[%d] : %f scale: %f swb_offset_long[%d] %d\n", iquant, k+i, decSpectrum[k+i], scale, sfb, swb_offset_short[sfb]);
                     }
                 }
             }
@@ -1966,8 +1949,6 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
     int enc_top_layer = bsac->top_layer;
     int nch = bsac->nch;
 
-    //av_log(NULL, AV_LOG_ERROR, "enc_top_layer! %d\n", enc_top_layer);
-    //av_log(NULL, AV_LOG_ERROR, "target! %d\n", target);
 
     bsac->pns->pcm_flag[1] = bsac->pns->pcm_flag[0] = 1;
     if (target > enc_top_layer)
@@ -2032,13 +2013,6 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
     slayer_size = bsac_initialize_layer_data(ac, bsac->che->ch[0].ics.window_sequence[0], bsac->che->ch[0].ics.num_window_groups,
             bsac->che->ch[0].ics.group_len, bsac->base_band, enc_top_layer, maxSfb, swb_offset, bsac->top_band,
             layer_max_freq, layer_max_cband, layer_max_qband, layer_bit_flush, layer_reg, gb);
-/*
-    av_log(NULL, AV_LOG_ERROR, "slayer_size! %d\n", slayer_size);
-    av_log(NULL, AV_LOG_ERROR, "swb_offset! %d\n", swb_offset);
-    av_log(NULL, AV_LOG_ERROR, "maxSfb! %d\n", maxSfb);
-    av_log(NULL, AV_LOG_ERROR, "bsac->top_band! %d\n", bsac->top_band);
-    av_log(NULL, AV_LOG_ERROR, "enc_top_layer! %d\n", enc_top_layer);
-    */
 
     for (i = 0; i <= enc_top_layer; i++)
         dscale_bits[i] = bsac_scale_bits[i] * nch;
@@ -2229,13 +2203,9 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
             for (ch = 0; ch < nch; ch++) {
                 g = layer_reg[layer];
                 e_freq[ch][g] = layer_max_freq[layer];
-                //av_log(NULL, AV_LOG_ERROR, "e_freq[ch][g]+! %d\n", e_freq[ch][g]);
             }
         }
     }
-    //av_log(NULL, AV_LOG_ERROR, "slayer_size+! %d\n", slayer_size);
-    //av_log(NULL, AV_LOG_ERROR, "target! %d\n", target);
-    //av_log(NULL, AV_LOG_ERROR, "nch %d\n", nch);
 
     for (layer = 0; layer < target + slayer_size; layer++) {
         int min_snf;
@@ -2298,8 +2268,6 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
 
         cw_len = decode_bsac_cband_si(bsac, ModelIndex, bsac->cband_si_type,
                 start_cband, end_cband, g, gb);
-        //av_log(NULL, AV_LOG_ERROR, "bsac->cband_si_type %d\n", bsac->cband_si_type);
-        //av_log(NULL, AV_LOG_ERROR, "cw_len %d\n", cw_len);
         for (ch = 0; ch < nch; ch++) {
             g = layer_reg[layer];
             for (cband = start_cband[ch][g]; cband < end_cband[ch][g]; cband++) {
@@ -2321,11 +2289,9 @@ static int decode_bsac_stream(AACContext *ac, BSAC *bsac, int target,
         else
             scf_model = (int *) bsac->scf_model1;
 
-        //av_log(NULL, AV_LOG_ERROR, "scf_model! %d\n", scf_model[0]);
         cw_len = decode_bsac_scfband_si(bsac, start_qband, end_qband, scf_model, maxSfb,
                 stereo_si_coded, g, gb);
 
-        //av_log(NULL, AV_LOG_ERROR, "decode_bsac_scfband_si cw_len %d\n", cw_len);
         available_len -= cw_len;
 
         min_snf = layer < slayer_size ? bsac->base_snf_thr : 1;
@@ -2467,17 +2433,14 @@ static void decode_bsac_data(AACContext *ac, BSAC *bsac, int target,
                                 = sample_buf[0][offset + 4 * b + k];
                         samples[1][128 * (b + s) + i + k]
                                 = sample_buf[1][offset + 4 * b + k];
-                        //av_log(NULL, AV_LOG_ERROR, "samples[0][%d] %d\n",128 * (b + s) + i + k, samples[0][128 * (b + s) + i + k]);
                     }
             }
-            //av_log(NULL, AV_LOG_ERROR, "ics->group_len[w] %d\n", ics->group_len[w]);
             s += ics->group_len[w];
         }
     } else {
         for (i = 0; i < 1024; i++) {
             samples[0][i] = sample_buf[0][i];
             samples[1][i] = sample_buf[1][i];
-            //av_log(NULL, AV_LOG_ERROR, "samples[0][%d] %d\n",i, samples[0][i]);
         }
     }
 }
@@ -3665,10 +3628,8 @@ static void bsac_pns(BSAC *bsac) {
     for (ch = 0; ch < bsac->nch; ch++) {
         nsp = noise_state_save;
 
-        av_log(NULL, AV_LOG_ERROR, "max_sfb %d\n", bsac->che->ch[ch].ics.max_sfb);
         for (sfb = 0; sfb < bsac->che->ch[ch].ics.max_sfb; sfb++) {
 
-            av_log(NULL, AV_LOG_ERROR, "sfb_flag %d\n", bsac->pns->sfb_flag[ch][sfb]);
             if (bsac->pns->sfb_flag[ch][sfb] == 0)
                 continue;
 
@@ -3696,6 +3657,60 @@ static void bsac_pns(BSAC *bsac) {
     }
 }
 
+static void bsac_ms_stereo(BSAC *bsac)
+{
+    float l, r, tmp;
+    float *spectrum0, *spectrum1;
+    int sfb, i;
+    int maxSfb = bsac->che->ch[0].ics.max_sfb;
+
+    spectrum0 = bsac->che->ch[0].coeffs;
+    spectrum1 = bsac->che->ch[1].coeffs;
+
+
+    if (bsac->che->ch[0].ics.window_sequence[0] != EIGHT_SHORT_SEQUENCE) {
+        for (sfb = 0; sfb < maxSfb; sfb++) {
+            if (bsac->che->ms_mask[sfb + 1] == 0)
+                continue;
+            for (i = swb_offset_long[sfb]; i < swb_offset_long[sfb + 1]; i++) {
+                l = spectrum0[i];
+                r = spectrum1[i];
+
+                tmp = l + r;
+                r = l - r;
+                l = tmp;
+
+                spectrum0[i] = l;
+                spectrum1[i] = r;
+            }
+        }
+    } else {
+        int w, b, s;
+
+        s = 0;
+        for (w = 0; w < bsac->che->ch[0].ics.num_window_groups; w++) {
+            for (b = s; b < s + bsac->che->ch[0].ics.group_len[w]; b++) {
+                for (sfb = 0; sfb < maxSfb; sfb++) {
+                    if (bsac->che->ms_mask[w * maxSfb + sfb + 1] == 0)
+                        continue;
+                    for (i = swb_offset_short[sfb]; i < swb_offset_short[sfb
+                            + 1]; i++) {
+                        l = spectrum0[b * 128 + i];
+                        r = spectrum1[b * 128 + i];
+
+                        tmp = l + r;
+                        r = l - r;
+                        l = tmp;
+
+                        spectrum0[b * 128 + i] = l;
+                        spectrum1[b * 128 + i] = r;
+                    }
+                }
+            }
+            s += bsac->che->ch[0].ics.group_len[w];
+        }
+    }
+}
 
 
 static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
@@ -3760,15 +3775,18 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
                 bsac->che->ch[1].ics.max_sfb = get_bits(gb, 6);
     }
 
-    bsac->che->ch[0].ics.num_window_groups = 1;
-    bsac->che->ch[0].ics.group_len[0] = 1;
+
+    bsac->che->ch[1].ics.num_window_groups = bsac->che->ch[0].ics.num_window_groups = 1;
+    bsac->che->ch[1].ics.group_len[0] = bsac->che->ch[0].ics.group_len[0] = 1;
     if (bsac->che->ch[0].ics.window_sequence[0] == 2) {
         for (b = 0; b < 7; b++) {
             if (groupInfo[b] == 0) {
-                bsac->che->ch[0].ics.group_len[bsac->che->ch[0].ics.num_window_groups] = 1;
+                bsac->che->ch[1].ics.group_len[bsac->che->ch[1].ics.num_window_groups] = bsac->che->ch[0].ics.group_len[bsac->che->ch[0].ics.num_window_groups] = 1;
                 bsac->che->ch[0].ics.num_window_groups++;
+                bsac->che->ch[1].ics.num_window_groups++;
             } else {
                 bsac->che->ch[0].ics.group_len[bsac->che->ch[0].ics.num_window_groups - 1]++;
+                bsac->che->ch[1].ics.group_len[bsac->che->ch[1].ics.num_window_groups - 1]++;
             }
         }
     }
@@ -3776,7 +3794,6 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
     bsac->pns->present = get_bits1(gb);
     if (bsac->pns->present) {
         bsac->pns->start_sfb = get_bits(gb, 6);
-        av_log(NULL, AV_LOG_ERROR, "bsac->pns->start_sfb!!!!! %d\n", bsac->pns->start_sfb);
     }
 
     if (nch == 2) {
@@ -3797,7 +3814,6 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
         bsac->che->ch[ch].tns.present = get_bits(gb, 1);
         if (bsac->che->ch[ch].tns.present) {
             decode_tns(ac, &bsac->che->ch[ch].tns, gb, &bsac->che->ch[ch].ics);
-            av_log(NULL, AV_LOG_ERROR, "TNS on!!!!!\n");
         }
 
         bsac->che->ch[ch].ics.ltp.present = get_bits(gb, 1);
@@ -3809,7 +3825,6 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
     }
 
     used_bits = get_bits_count(gb);
-    av_log(NULL, AV_LOG_ERROR, "used_bits!: %d!!!!\n", used_bits);
 
 
     if (target_br == 0) {
@@ -3827,25 +3842,31 @@ static int bsac_decode_frame(AACContext *ac, BSAC *bsac, int target_br,
                 ch, gb);
     }
 
-    if (ms_mask[0]) {
+    if (bsac->che->ms_mode) {
+        /*
+        for ( b = 0; b < bsac->pns->start_sfb; b++) {
+            bsac->che->ch[0].band_type[b] = 0;
+        }
+        for ( ; b < bsac->che->ch[0].ics.max_sfb; b++) {
+            bsac->che->ch[0].band_type[b] = 0;
+        }
         apply_mid_side_stereo(ac, bsac->che);
-        av_log(NULL, AV_LOG_ERROR, "MS on!!!!!\n");
+        */
+        bsac_ms_stereo(bsac);
+
     }
 
     if (bsac->pns->present) {
         bsac_pns(bsac);
-        av_log(NULL, AV_LOG_ERROR, "PNS on!!!!!\n");
     }
 
     if (nch == 2 && bsac->is_intensity) {
         apply_intensity_stereo(ac, bsac->che, bsac->che->ms_mode);
-        av_log(NULL, AV_LOG_ERROR, "IS on!!!!!\n");
     }
 
     for (ch = 0; ch < nch; ch++) {
         if (bsac->che->ch[ch].tns.present) {
             apply_tns(bsac->che->ch[ch].coeffs, &bsac->che->ch[ch].tns, &bsac->che->ch[ch].ics, 1);
-            av_log(NULL, AV_LOG_ERROR, "TNS on!!!!!\n");
         }
     }
 
